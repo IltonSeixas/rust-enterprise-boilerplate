@@ -1,3 +1,5 @@
+> **Em desenvolvimento** — este projeto ainda está em construção e não deve ser utilizado em produção.
+
 # rust-enterprise-boilerplate
 
 [![CI](https://github.com/IltonSeixas/rust-enterprise-boilerplate/actions/workflows/ci.yml/badge.svg)](https://github.com/IltonSeixas/rust-enterprise-boilerplate/actions/workflows/ci.yml)
