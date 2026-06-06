@@ -1,6 +1,6 @@
 # ADR-0003: Stateless JWT Access Tokens with Server-Side Refresh Tokens
 
-**Date:** 2024-01-01  
+**Date:** 2026-06-06  
 **Status:** Accepted
 
 ---
