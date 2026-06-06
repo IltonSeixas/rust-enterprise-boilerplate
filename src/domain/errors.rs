@@ -24,6 +24,7 @@ pub enum DomainError {
     AccountInactive,
 
     #[error("insufficient permissions")]
+    #[allow(dead_code)]
     InsufficientPermissions,
 
     #[error("repository error: {0}")]

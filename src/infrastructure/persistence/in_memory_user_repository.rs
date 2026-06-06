@@ -111,4 +111,34 @@ mod tests {
         repo.delete(id).await.unwrap();
         assert!(repo.find_by_id(id).await.unwrap().is_none());
     }
+
+    #[tokio::test]
+    async fn save_first_owner_succeeds_when_no_owner_exists() {
+        let repo = InMemoryUserRepository::new();
+        let email = Email::new("owner@example.com").unwrap();
+        let hash = PasswordHash::from_phc_string("$argon2id$v=19$...".into());
+        let owner = User::new(email, hash, "Owner".into(), Role::Owner).unwrap();
+        let saved = repo.save_first_owner(&owner).await.unwrap();
+        assert!(saved);
+        assert_eq!(repo.count().await.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn save_first_owner_rejects_second_owner() {
+        let repo = InMemoryUserRepository::new();
+
+        let email1 = Email::new("owner1@example.com").unwrap();
+        let hash1 = PasswordHash::from_phc_string("$argon2id$v=19$...".into());
+        let owner1 = User::new(email1, hash1, "Owner1".into(), Role::Owner).unwrap();
+        let first = repo.save_first_owner(&owner1).await.unwrap();
+        assert!(first);
+
+        let email2 = Email::new("owner2@example.com").unwrap();
+        let hash2 = PasswordHash::from_phc_string("$argon2id$v=19$...".into());
+        let owner2 = User::new(email2, hash2, "Owner2".into(), Role::Owner).unwrap();
+        let second = repo.save_first_owner(&owner2).await.unwrap();
+        assert!(!second);
+
+        assert_eq!(repo.count().await.unwrap(), 1);
+    }
 }

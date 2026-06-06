@@ -143,4 +143,69 @@ mod tests {
         };
         assert_eq!(uc.execute(req).await.unwrap_err(), DomainError::EmailAlreadyExists);
     }
+
+    #[tokio::test]
+    async fn first_registration_claims_owner_role() {
+        let mut repo = MockUserRepo::new();
+        let mut hasher = MockHasher::new();
+        let mut token_svc = MockTokenSvc::new();
+
+        repo.expect_find_by_email().returning(|_| Ok(None));
+        repo.expect_save_first_owner().returning(|_| Ok(true));
+
+        hasher.expect_hash().returning(|_| {
+            Ok(crate::domain::value_objects::PasswordHash::from_phc_string(
+                "$argon2id$v=19$m=65536,t=2,p=1$salt$hash".into(),
+            ))
+        });
+
+        token_svc.expect_generate_pair().returning(|_, _| {
+            Ok(crate::application::ports::TokenPair {
+                access_token: "access".into(),
+                refresh_token: "refresh".into(),
+            })
+        });
+
+        let uc = RegisterUser::new(Arc::new(repo), Arc::new(hasher), Arc::new(token_svc));
+        let req = RegisterRequest {
+            email: "owner@example.com".into(),
+            password: "strongpassword1234".into(),
+            name: "Owner".into(),
+        };
+        let result = uc.execute(req).await.unwrap();
+        assert_eq!(result.user.role, Role::Owner);
+    }
+
+    #[tokio::test]
+    async fn second_owner_registration_falls_back_to_member() {
+        let mut repo = MockUserRepo::new();
+        let mut hasher = MockHasher::new();
+        let mut token_svc = MockTokenSvc::new();
+
+        repo.expect_find_by_email().returning(|_| Ok(None));
+        repo.expect_save_first_owner().returning(|_| Ok(false));
+        repo.expect_save().returning(|_| Ok(()));
+
+        hasher.expect_hash().returning(|_| {
+            Ok(crate::domain::value_objects::PasswordHash::from_phc_string(
+                "$argon2id$v=19$m=65536,t=2,p=1$salt$hash".into(),
+            ))
+        });
+
+        token_svc.expect_generate_pair().returning(|_, _| {
+            Ok(crate::application::ports::TokenPair {
+                access_token: "access".into(),
+                refresh_token: "refresh".into(),
+            })
+        });
+
+        let uc = RegisterUser::new(Arc::new(repo), Arc::new(hasher), Arc::new(token_svc));
+        let req = RegisterRequest {
+            email: "member@example.com".into(),
+            password: "strongpassword1234".into(),
+            name: "Member".into(),
+        };
+        let result = uc.execute(req).await.unwrap();
+        assert_eq!(result.user.role, Role::User);
+    }
 }

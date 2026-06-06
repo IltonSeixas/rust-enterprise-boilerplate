@@ -19,6 +19,7 @@ impl Role {
         matches!(self, Role::Owner | Role::Admin)
     }
 
+    #[allow(dead_code)]
     pub fn can_promote_to(&self, target: &Role) -> bool {
         match (self, target) {
             (Role::Owner, _) => true,
@@ -71,6 +72,7 @@ impl User {
         })
     }
 
+    #[allow(dead_code)]
     pub fn reconstitute(
         id: UserId,
         email: Email,
@@ -105,6 +107,7 @@ impl User {
         self.updated_at = Utc::now();
     }
 
+    #[allow(dead_code)]
     pub fn change_role(&mut self, new_role: Role, actor: &User) -> Result<(), DomainError> {
         if !actor.role.can_promote_to(&new_role) {
             return Err(DomainError::InsufficientPermissions);
@@ -114,11 +117,13 @@ impl User {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn deactivate(&mut self) {
         self.is_active = false;
         self.updated_at = Utc::now();
     }
 
+    #[allow(dead_code)]
     pub fn activate(&mut self) {
         self.is_active = true;
         self.updated_at = Utc::now();
@@ -218,5 +223,68 @@ mod tests {
         let actor = make_user(Role::Owner);
         assert!(target.change_role(Role::Admin, &actor).is_ok());
         assert!(target.change_role(Role::Owner, &actor).is_ok());
+    }
+
+    #[test]
+    fn new_user_has_correct_role() {
+        let user = make_user(Role::Owner);
+        assert_eq!(user.role(), &Role::Owner);
+
+        let user = make_user(Role::Admin);
+        assert_eq!(user.role(), &Role::Admin);
+    }
+
+    #[test]
+    fn update_name_changes_name_and_updates_timestamp() {
+        let mut user = make_user(Role::User);
+        let before = user.updated_at();
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        user.update_name("New Name".into()).unwrap();
+        assert_eq!(user.name(), "New Name");
+        assert!(user.updated_at() >= before);
+    }
+
+    #[test]
+    fn update_password_changes_hash_and_updates_timestamp() {
+        let mut user = make_user(Role::User);
+        let before = user.updated_at();
+        let new_hash = PasswordHash::from_phc_string("$argon2id$v=19$new_hash".into());
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        user.update_password(new_hash.clone());
+        assert_eq!(user.password_hash().value(), new_hash.value());
+        assert!(user.updated_at() >= before);
+    }
+
+    #[test]
+    fn activate_sets_is_active_true() {
+        let mut user = make_user(Role::User);
+        user.deactivate();
+        assert!(!user.is_active());
+        user.activate();
+        assert!(user.is_active());
+    }
+
+    #[test]
+    fn reconstitute_preserves_all_fields() {
+        use crate::domain::value_objects::UserId;
+        let id = UserId::new();
+        let email = Email::new("reconstitute@example.com").unwrap();
+        let hash = PasswordHash::from_phc_string("$argon2id$v=19$...".into());
+        let now = Utc::now();
+        let user = User::reconstitute(
+            id,
+            email.clone(),
+            hash.clone(),
+            "Reconstituted".into(),
+            Role::Admin,
+            false,
+            now,
+            now,
+        );
+        assert_eq!(user.id(), id);
+        assert_eq!(user.email(), &email);
+        assert_eq!(user.name(), "Reconstituted");
+        assert_eq!(user.role(), &Role::Admin);
+        assert!(!user.is_active());
     }
 }
