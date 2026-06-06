@@ -1,6 +1,6 @@
 # ADR-0002: Use Argon2id for Password Hashing
 
-**Date:** 2024-01-01  
+**Date:** 2026-06-06  
 **Status:** Accepted
 
 ---
