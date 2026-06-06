@@ -8,7 +8,9 @@ pub trait UserRepository: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, DomainError>;
     async fn find_by_email(&self, email: &Email) -> Result<Option<User>, DomainError>;
     async fn save(&self, user: &User) -> Result<(), DomainError>;
+    #[allow(dead_code)]
     async fn delete(&self, id: Uuid) -> Result<(), DomainError>;
+    #[allow(dead_code)]
     async fn count(&self) -> Result<u64, DomainError>;
 
     /// Atomically saves `user` only if no Owner exists yet.

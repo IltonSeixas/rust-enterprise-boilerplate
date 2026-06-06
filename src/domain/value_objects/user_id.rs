@@ -8,6 +8,7 @@ impl UserId {
         Self(Uuid::new_v4())
     }
 
+    #[allow(dead_code)]
     pub fn from_uuid(uuid: Uuid) -> Self {
         Self(uuid)
     }
