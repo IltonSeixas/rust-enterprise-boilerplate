@@ -1,4 +1,4 @@
-> **Em desenvolvimento** — este projeto ainda está em construção e não deve ser utilizado em produção.
+> **Work in progress** — this project is under active development and is not yet production-ready.
 
 # rust-enterprise-boilerplate
 
