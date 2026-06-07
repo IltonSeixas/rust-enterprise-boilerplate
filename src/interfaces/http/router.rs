@@ -32,9 +32,10 @@ pub fn build_router(
     metrics_handle: PrometheusHandle,
     router_cfg: RouterConfig,
 ) -> Router {
+    let rate_limit_per_second = router_cfg.rate_limit_per_second.max(1) as u32;
     let governor_cfg = GovernorConfigBuilder::default()
         .key_extractor(PeerIpKeyExtractor)
-        .period(Duration::from_secs(1) / router_cfg.rate_limit_per_second as u32)
+        .period(Duration::from_secs(1) / rate_limit_per_second)
         .burst_size(router_cfg.rate_limit_burst)
         .finish()
         .expect("invalid rate limiter configuration");

@@ -46,7 +46,7 @@ pub fn init_tracing(
         .with(otel_layer)
         .init();
 
-    tracing::info!(service = service_name, otlp_endpoint, "tracing initialized");
+    tracing::info!(service = service_name, "tracing initialized");
 
     Ok(())
 }
