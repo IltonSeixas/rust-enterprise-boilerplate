@@ -148,11 +148,14 @@ The `PasswordHasher` trait abstracts the algorithm — the domain never touches 
 
 ### gRPC — `localhost:50051`
 
-Proto definitions live in `proto/`. Compile with:
+Proto definitions live in `proto/boilerplate.proto` and are compiled by `tonic-build` from `build.rs` on every `cargo build` (the `protoc` binary is vendored via `protoc-bin-vendored`, so no system dependency is required).
 
-```bash
-cargo build  # tonic-build runs automatically via build.rs
-```
+| Service | RPC | Mirrors |
+|---|---|---|
+| `AuthService` | `Register`, `Login`, `RefreshToken` | `/api/v1/auth/*` |
+| `UserService` | `GetMe`, `UpdateProfile`, `ChangePassword` | `/api/v1/users/*` |
+
+`UserService` RPCs require an `authorization: Bearer <access_token>` request metadata entry, validated the same way as the REST `require_auth` middleware (active-account check included).
 
 ---
 

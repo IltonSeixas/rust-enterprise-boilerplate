@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use tokio::net::TcpListener;
+use tonic::transport::Server as GrpcServer;
 
 mod application;
 mod config;
@@ -17,13 +18,16 @@ use infrastructure::{
     security::{Argon2Hasher, JwtTokenService},
     telemetry::{init_prometheus, init_tracing},
 };
-use interfaces::http::{
-    build_router,
-    handlers::{
-        auth_handler::AuthState,
-        user_handler::UserState,
+use interfaces::{
+    grpc::{AuthGrpcService, AuthServiceServer, UserGrpcService, UserServiceServer},
+    http::{
+        build_router,
+        handlers::{
+            auth_handler::AuthState,
+            user_handler::UserState,
+        },
+        middleware::AuthMiddlewareState,
     },
-    middleware::AuthMiddlewareState,
 };
 
 #[tokio::main]
@@ -84,13 +88,38 @@ async fn main() -> anyhow::Result<()> {
         user_repo: Arc::clone(&user_repo),
     };
 
+    let auth_grpc = AuthGrpcService {
+        register: Arc::clone(&auth_state.register),
+        login: Arc::clone(&auth_state.login),
+        refresh: Arc::clone(&auth_state.refresh),
+    };
+    let user_grpc = UserGrpcService {
+        get_user: Arc::clone(&user_state.get_user),
+        update_profile: Arc::clone(&user_state.update_profile),
+        change_password: Arc::clone(&user_state.change_password),
+        token_svc: Arc::clone(&token_svc),
+        user_repo: Arc::clone(&user_repo),
+    };
+
     let router = build_router(auth_state, user_state, auth_mw_state);
 
-    let addr = format!("{}:{}", cfg.host, cfg.port);
-    let listener = TcpListener::bind(&addr).await?;
-    tracing::info!(address = %addr, "server listening");
+    let http_addr = format!("{}:{}", cfg.host, cfg.port);
+    let listener = TcpListener::bind(&http_addr).await?;
+    tracing::info!(address = %http_addr, "http server listening");
 
-    axum::serve(listener, router).await?;
+    let grpc_addr: std::net::SocketAddr = format!("{}:{}", cfg.host, cfg.grpc_port).parse()?;
+    tracing::info!(address = %grpc_addr, "grpc server listening");
+
+    let http_server = axum::serve(listener, router);
+    let grpc_server = GrpcServer::builder()
+        .add_service(AuthServiceServer::new(auth_grpc))
+        .add_service(UserServiceServer::new(user_grpc))
+        .serve(grpc_addr);
+
+    tokio::try_join!(
+        async { http_server.await.map_err(anyhow::Error::from) },
+        async { grpc_server.await.map_err(anyhow::Error::from) },
+    )?;
 
     Ok(())
 }
