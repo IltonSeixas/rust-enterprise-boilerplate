@@ -9,7 +9,6 @@ Contributions are welcome. Please read this document before opening a pull reque
 - Rust 1.78+ (`rustup update stable`)
 - `cargo-llvm-cov` for coverage: `cargo install cargo-llvm-cov`
 - `cargo-audit` for security auditing: `cargo install cargo-audit`
-- Docker (for integration tests)
 
 ---
 
@@ -33,9 +32,6 @@ cargo fmt
 
 # Run security audit
 cargo audit
-
-# Run integration tests (requires Docker)
-cargo test --test integration
 ```
 
 All of the above run automatically in CI on every pull request. A PR will not be merged if any of these steps fail.
@@ -61,8 +57,8 @@ All of the above run automatically in CI on every pull request. A PR will not be
 ### Tests
 
 - New behavior requires a test written first (TDD)
-- Mock repositories via `mockall` — never use real infrastructure in unit tests
-- Integration tests must clean up after themselves (transactions rolled back)
+- Mock repositories, hashers, and token services via `mockall` — never use real infrastructure in unit tests
+- HTTP-level concerns (middleware, routing) are tested with `tower::ServiceExt::oneshot` against a minimal router
 
 ---
 

@@ -2,23 +2,18 @@
 
 ## Philosophy
 
-Tests are written before implementation (TDD). The test suite is organized in two strict tiers: unit tests that run in milliseconds with no external dependencies, and integration tests that run against real infrastructure.
-
-The in-memory adapter exists precisely to make the entire business logic testable without Docker, a database, or any network call.
+Tests are written before implementation (TDD) and live alongside the code they test in `#[cfg(test)]` modules — there is no separate integration-test crate or tier. The in-memory adapter exists precisely to make the entire business logic testable without Docker, a database, or any network call.
 
 ---
 
 ## Running Tests
 
 ```bash
-# Unit tests only (fast, no external deps)
+# Run the full suite
 cargo test
 
-# Integration tests (requires PostgreSQL and Redis)
-cargo test --test integration
-
 # Specific test
-cargo test test_register_user_success
+cargo test register_user_succeeds_with_valid_input
 
 # With output
 cargo test -- --nocapture
@@ -45,25 +40,25 @@ src/
 │       ├── register_user.rs  # use case tests with mock repositories
 │       └── login_user.rs
 │
-tests/
-├── integration/
-│   ├── auth_flow.rs          # full HTTP flow against real DB
-│   └── user_repository.rs   # adapter tests against real PostgreSQL
-└── common/
-    └── helpers.rs            # shared test setup
+└── interfaces/
+    └── http/
+        └── middleware/
+            ├── cors.rs           # tower::ServiceExt::oneshot against a minimal router
+            └── security_headers.rs
 ```
 
 ---
 
 ## Unit Tests
 
-Unit tests live in `#[cfg(test)]` blocks inside the source file they test. They cover:
+Tests live in `#[cfg(test)]` blocks inside the source file they exercise. They cover:
 
 - Value object construction (valid and invalid inputs)
 - Entity invariant enforcement
 - Use case business logic (success and failure paths)
+- HTTP middleware behavior, driven through `tower::ServiceExt::oneshot` against a minimal `Router` — no real network socket involved
 
-Repository dependencies are replaced with `mockall` mocks generated from the trait definition.
+Repository, hasher, and token-service dependencies are replaced with `mockall` mocks generated from the trait definitions.
 
 ### Example — Value Object
 
@@ -133,34 +128,29 @@ mod tests {
 
 ---
 
-## Integration Tests
+## HTTP Middleware Tests
 
-Integration tests live in `tests/` and are compiled as separate crates. They run against a real PostgreSQL instance (configured via `TEST_DATABASE_URL`).
+Middleware that depends on the HTTP layer (CORS, security headers) is exercised end-to-end with `tower::ServiceExt::oneshot` against a minimal `Router` — no real network socket, no test server process.
 
 ```rust
-// tests/integration/auth_flow.rs
+// interfaces/http/middleware/security_headers.rs
 
 #[tokio::test]
-async fn register_and_login_returns_valid_tokens() {
-    let app = spawn_test_app().await;
+async fn injects_expected_security_headers() {
+    let app = Router::new()
+        .route("/ping", get(|| async { "pong" }))
+        .layer(middleware::from_fn(security_headers));
 
-    let res = app.post("/api/v1/auth/register")
-        .json(&json!({ "email": "test@example.com", "password": "SecurePass123!" }))
-        .send().await;
+    let response = app
+        .oneshot(Request::builder().uri("/ping").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
 
-    assert_eq!(res.status(), 201);
-
-    let res = app.post("/api/v1/auth/login")
-        .json(&json!({ "email": "test@example.com", "password": "SecurePass123!" }))
-        .send().await;
-
-    assert_eq!(res.status(), 200);
-    let body: serde_json::Value = res.json().await;
-    assert!(body["access_token"].is_string());
+    let headers = response.headers();
+    assert_eq!(headers["x-content-type-options"], "nosniff");
+    assert_eq!(headers["x-frame-options"], "DENY");
 }
 ```
-
-Each integration test runs inside a transaction that is rolled back at the end — tests are isolated and the database is left clean.
 
 ---
 
@@ -183,4 +173,4 @@ Never write implementation code without a failing test first.
 | Domain (entities + value objects) | 100% |
 | Application (use cases) | 100% |
 | Infrastructure adapters | 80%+ |
-| HTTP handlers | 70%+ (covered by integration tests) |
+| HTTP middleware | 80%+ |

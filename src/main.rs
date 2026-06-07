@@ -27,6 +27,7 @@ use interfaces::{
             user_handler::UserState,
         },
         middleware::AuthMiddlewareState,
+        RouterConfig,
     },
 };
 
@@ -34,8 +35,8 @@ use interfaces::{
 async fn main() -> anyhow::Result<()> {
     let cfg = AppConfig::from_env().expect("failed to load configuration");
 
-    init_tracing("rust-enterprise-boilerplate");
-    let _prometheus = init_prometheus();
+    init_tracing("rust-enterprise-boilerplate", &cfg.otlp_endpoint)?;
+    let metrics_handle = init_prometheus();
 
     let redis_url = cfg
         .redis_url
@@ -101,7 +102,18 @@ async fn main() -> anyhow::Result<()> {
         user_repo: Arc::clone(&user_repo),
     };
 
-    let router = build_router(auth_state, user_state, auth_mw_state);
+    let router_cfg = RouterConfig {
+        allowed_origins: cfg.allowed_origin_list(),
+        rate_limit_per_second: cfg.rate_limit_per_second,
+        rate_limit_burst: cfg.rate_limit_burst,
+    };
+    let router = build_router(
+        auth_state,
+        user_state,
+        auth_mw_state,
+        metrics_handle,
+        router_cfg,
+    );
 
     let http_addr = format!("{}:{}", cfg.host, cfg.port);
     let listener = TcpListener::bind(&http_addr).await?;
@@ -116,10 +128,14 @@ async fn main() -> anyhow::Result<()> {
         .add_service(UserServiceServer::new(user_grpc))
         .serve(grpc_addr);
 
-    tokio::try_join!(
+    let result = tokio::try_join!(
         async { http_server.await.map_err(anyhow::Error::from) },
         async { grpc_server.await.map_err(anyhow::Error::from) },
-    )?;
+    );
+
+    opentelemetry::global::shutdown_tracer_provider();
+
+    result?;
 
     Ok(())
 }

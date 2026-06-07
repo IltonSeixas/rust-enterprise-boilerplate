@@ -32,12 +32,9 @@ src/
 │   └── dtos/             # Data transfer objects
 │
 ├── infrastructure/       # Adapters — depends on application + domain
-│   ├── persistence/
-│   │   ├── in_memory/    # Default: zero-config, runs immediately
-│   │   └── postgres/     # Production: SQLx + PostgreSQL
-│   ├── security/         # Argon2id password hashing
-│   ├── observability/    # OpenTelemetry traces, metrics, logs
-│   └── cache/            # Redis adapter
+│   ├── persistence/      # in_memory_user_repository (default) + postgres_user_repository
+│   ├── security/         # Argon2id hashing, JWT issuance/validation (Redis-backed refresh tokens)
+│   └── telemetry/        # tracing (OTLP) and Prometheus metrics setup
 │
 ├── interfaces/           # Entry points
 │   ├── http/             # Axum REST handlers, middleware, routes
@@ -67,8 +64,9 @@ Nothing in `domain/` or `application/` imports from `infrastructure/` or `interf
 | Database (production) | `sqlx` (PostgreSQL) |
 | Password hashing | `argon2` (Argon2id) |
 | JWT | `jsonwebtoken` |
-| Validation | `validator` |
+| Validation | self-validating domain value objects |
 | Serialization | `serde` + `serde_json` |
+| Edge security | `tower_governor` (rate limiting) + `tower-http` (CORS, security headers) |
 | Observability | `opentelemetry` + `tracing` + `tracing-opentelemetry` |
 | Error handling | `thiserror` + `anyhow` |
 | Config | `config` + `dotenvy` |
@@ -91,7 +89,7 @@ cd rust-enterprise-boilerplate
 cargo run
 ```
 
-The server starts on `http://localhost:3000` using the in-memory adapter. No database required.
+The server starts on `http://localhost:8080` using the in-memory adapter. No database required.
 
 ### Run with PostgreSQL
 
@@ -125,25 +123,28 @@ The `PasswordHasher` trait abstracts the algorithm — the domain never touches 
 
 ### Security Middleware (applied globally)
 
-- Rate limiting: sliding window per IP
-- Security headers: `X-Content-Type-Options`, `X-Frame-Options`, `Strict-Transport-Security`, `Content-Security-Policy`
-- CORS: explicit allow-list, never `*` in production
-- Input validation: `validator` crate on all DTOs at the HTTP boundary
+- Rate limiting: per-IP token bucket via `tower_governor` (`RATE_LIMIT_PER_SECOND`/`RATE_LIMIT_BURST`, default 10 req/s with a burst of 20)
+- Security headers: `X-Content-Type-Options`, `X-Frame-Options`, `Strict-Transport-Security`, `Referrer-Policy`
+- CORS: explicit allow-list via `ALLOWED_ORIGINS`, never `*` — unlisted origins receive no CORS headers
+- Input validation: self-validating domain value objects (`Email`, `PasswordHash`, ...) reject malformed input at construction time
 
 ---
 
 ## API
 
-### REST — `http://localhost:3000`
+### REST — `http://localhost:8080`
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/v1/auth/register` | Register a new user |
-| `POST` | `/api/v1/auth/login` | Authenticate, receive tokens |
-| `POST` | `/api/v1/auth/refresh` | Rotate refresh token |
-| `POST` | `/api/v1/auth/logout` | Revoke refresh token |
-| `GET` | `/api/v1/users/me` | Get authenticated user profile |
-| `GET` | `/health` | Health check |
+| `POST` | `/v1/auth/register` | Register a new user |
+| `POST` | `/v1/auth/login` | Authenticate, receive tokens |
+| `POST` | `/v1/auth/refresh` | Rotate refresh token |
+| `GET` | `/v1/users/me` | Get authenticated user profile |
+| `PUT` | `/v1/users/me` | Update authenticated user profile |
+| `PUT` | `/v1/users/me/password` | Change authenticated user password |
+| `GET` | `/v1/users/:id` | Get a user by id |
+| `GET` | `/health` | Liveness check |
+| `GET` | `/ready` | Readiness check |
 | `GET` | `/metrics` | Prometheus metrics |
 
 ### gRPC — `localhost:50051`
@@ -152,8 +153,8 @@ Proto definitions live in `proto/boilerplate.proto` and are compiled by `tonic-b
 
 | Service | RPC | Mirrors |
 |---|---|---|
-| `AuthService` | `Register`, `Login`, `RefreshToken` | `/api/v1/auth/*` |
-| `UserService` | `GetMe`, `UpdateProfile`, `ChangePassword` | `/api/v1/users/*` |
+| `AuthService` | `Register`, `Login`, `RefreshToken` | `/v1/auth/*` |
+| `UserService` | `GetMe`, `UpdateProfile`, `ChangePassword` | `/v1/users/*` |
 
 `UserService` RPCs require an `authorization: Bearer <access_token>` request metadata entry, validated the same way as the REST `require_auth` middleware (active-account check included).
 
@@ -162,14 +163,12 @@ Proto definitions live in `proto/boilerplate.proto` and are compiled by `tonic-b
 ## Testing
 
 ```bash
-cargo test                    # unit tests (no external deps)
-cargo test --test integration # integration tests (requires Postgres)
+cargo test
 ```
 
 ### Structure
 
-- **Unit tests**: co-located with source (`#[cfg(test)]` blocks). Domain and use cases tested in full isolation using `mockall` mocks for repository ports.
-- **Integration tests**: `tests/` directory. Spin up real adapters against a test database.
+- **Unit tests**: co-located with source (`#[cfg(test)]` modules). Domain and use cases are tested in full isolation using `mockall`-generated mocks for repository, hasher and token-service ports; HTTP middleware (CORS, security headers) is exercised through `tower::ServiceExt::oneshot` against a minimal router.
 
 ### TDD Approach
 
@@ -185,16 +184,16 @@ The in-memory adapter makes unit tests fast and deterministic — no test contai
 
 ## Observability
 
-OpenTelemetry is wired in from the start:
+`infrastructure/telemetry` wires the three pillars on startup:
 
-- **Traces**: every HTTP request and gRPC call is a span; use cases emit child spans
-- **Metrics**: request count, latency histograms, error rates exposed at `/metrics` (Prometheus format)
-- **Logs**: structured JSON via `tracing`, correlated with trace IDs
+- **Traces**: a global `TracerProvider` batches spans through an OTLP gRPC exporter (`opentelemetry-otlp` + `tracing-opentelemetry`), tagging them with the service name. `tracing::info!`/`#[tracing::instrument]` calls anywhere in the codebase become spans automatically.
+- **Metrics**: `metrics_exporter_prometheus` installs a global recorder; the handle is exposed at `GET /metrics` in the Prometheus exposition format.
+- **Logs**: structured JSON via `tracing-subscriber`, correlated with the active span through `with_current_span`/`with_span_list`.
 
-Export to any OTLP-compatible backend (Jaeger, Grafana Tempo, Honeycomb, Datadog):
+Export traces to any OTLP-compatible backend (Jaeger, Grafana Tempo, Honeycomb, Datadog) by changing one variable:
 
 ```env
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+OTLP_ENDPOINT=http://localhost:4317
 ```
 
 ---
@@ -206,15 +205,18 @@ All configuration via environment variables (12-Factor). See `.env.example` for 
 | Variable | Default | Description |
 |---|---|---|
 | `HOST` | `0.0.0.0` | Bind address |
-| `PORT` | `3000` | HTTP port |
+| `PORT` | `8080` | HTTP port |
 | `GRPC_PORT` | `50051` | gRPC port |
-| `DATABASE_URL` | — | PostgreSQL connection string |
-| `REDIS_URL` | — | Redis connection string |
+| `DATABASE_URL` | — | PostgreSQL connection string (only read when built with `--features postgres`) |
+| `REDIS_URL` | `redis://127.0.0.1:6379` | Redis connection string (refresh token storage) |
 | `JWT_SECRET` | — | HS256 signing key (min 32 chars) |
-| `JWT_ACCESS_TTL_SECS` | `900` | Access token TTL |
-| `JWT_REFRESH_TTL_SECS` | `604800` | Refresh token TTL |
-| `RATE_LIMIT_RPS` | `100` | Max requests/sec per IP |
-| `RUST_LOG` | `info` | Log level |
+| `JWT_ACCESS_TTL_SECONDS` | `900` | Access token TTL, in seconds |
+| `JWT_REFRESH_TTL_SECONDS` | `604800` | Refresh token TTL, in seconds |
+| `ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated CORS allow-list |
+| `RATE_LIMIT_PER_SECOND` | `10` | Sustained requests/sec per IP |
+| `RATE_LIMIT_BURST` | `20` | Burst capacity per IP |
+| `OTLP_ENDPOINT` | `http://localhost:4317` | OTLP gRPC endpoint for traces |
+| `RUST_LOG` | `info` | Log level (`tracing-subscriber` `EnvFilter` syntax) |
 
 ---
 
@@ -225,11 +227,11 @@ All configuration via environment variables (12-Factor). See `.env.example` for 
 docker build -t rust-enterprise-boilerplate .
 
 # Run
-docker run -p 3000:3000 -p 50051:50051 --env-file .env rust-enterprise-boilerplate
+docker run -p 8080:8080 -p 50051:50051 --env-file .env rust-enterprise-boilerplate
 ```
 
 ```bash
-# Full stack: app + postgres + redis + jaeger
+# Full stack: app + redis + jaeger + prometheus + grafana
 docker compose up
 ```
 

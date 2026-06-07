@@ -17,49 +17,50 @@ cp .env.example .env
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `HOST` | No | `0.0.0.0` | Bind address |
-| `PORT` | No | `3000` | HTTP listen port |
+| `PORT` | No | `8080` | HTTP listen port |
 | `GRPC_PORT` | No | `50051` | gRPC listen port |
 
 ### Persistence
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `ADAPTER` | No | `memory` | Persistence adapter: `memory` or `postgres` |
-| `DATABASE_URL` | If `postgres` | — | PostgreSQL connection string (`postgres://user:pass@host/db`) |
-| `DATABASE_MAX_CONNECTIONS` | No | `10` | Connection pool size |
-| `DATABASE_MIN_CONNECTIONS` | No | `1` | Minimum idle connections |
-| `DATABASE_ACQUIRE_TIMEOUT_SECS` | No | `30` | Connection acquire timeout |
+The persistence adapter is chosen at **compile time** via a Cargo feature flag, not a runtime variable:
 
-### Cache
+```bash
+cargo run                    # in-memory adapter (default, zero config)
+cargo run --features postgres # PostgreSQL adapter
+```
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `REDIS_URL` | If `postgres` | — | Redis connection string (`redis://host:port`) |
+| `DATABASE_URL` | Only when built with `--features postgres` | — | PostgreSQL connection string (`postgres://user:pass@host/db`) |
+
+### Refresh Tokens
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `REDIS_URL` | No | `redis://127.0.0.1:6379` | Redis connection string — backs refresh-token storage and rotation |
 
 ### Authentication
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `JWT_SECRET` | Yes | — | HS256 signing key — minimum 32 characters, use a random value |
-| `JWT_ACCESS_TTL_SECS` | No | `900` | Access token TTL in seconds (15 min) |
-| `JWT_REFRESH_TTL_SECS` | No | `604800` | Refresh token TTL in seconds (7 days) |
+| `JWT_ACCESS_TTL_SECONDS` | No | `900` | Access token TTL in seconds (15 min) |
+| `JWT_REFRESH_TTL_SECONDS` | No | `604800` | Refresh token TTL in seconds (7 days) |
 
 ### Security
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `ALLOWED_ORIGINS` | No | `http://localhost:*` | Comma-separated CORS allowed origins |
-| `RATE_LIMIT_RPS` | No | `100` | Max requests per second per IP |
-| `RATE_LIMIT_WINDOW_SECS` | No | `60` | Rate limit sliding window duration |
+| `ALLOWED_ORIGINS` | No | `http://localhost:3000` | Comma-separated CORS allow-list — the wildcard `*` is never honored |
+| `RATE_LIMIT_PER_SECOND` | No | `10` | Sustained requests per second per IP (token-bucket refill rate) |
+| `RATE_LIMIT_BURST` | No | `20` | Burst capacity per IP before throttling kicks in |
 
 ### Observability
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `RUST_LOG` | No | `info` | Log level (`error`, `warn`, `info`, `debug`, `trace`) |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | No | `http://localhost:4317` | OTLP gRPC endpoint |
-| `OTEL_SERVICE_NAME` | No | `rust-enterprise-boilerplate` | Service name in traces |
-| `OTEL_SERVICE_VERSION` | No | — | Injected by CI from git tag |
+| `RUST_LOG` | No | `info` | Log level / `tracing-subscriber` `EnvFilter` directive (`error`, `warn`, `info`, `debug`, `trace`) |
+| `OTLP_ENDPOINT` | No | `http://localhost:4317` | OTLP gRPC endpoint for the trace exporter |
 
 ---
 
