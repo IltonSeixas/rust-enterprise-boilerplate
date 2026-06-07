@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+package boilerplate.v1;
+
+// Mirrors the REST authentication endpoints under /api/v1/auth.
+service AuthService {
+  rpc Register(RegisterRequest) returns (AuthResponse);
+  rpc Login(LoginRequest) returns (AuthResponse);
+  rpc RefreshToken(RefreshTokenRequest) returns (AuthResponse);
+}
+
+// Mirrors the REST user endpoints under /api/v1/users.
+// Every RPC requires an `authorization: Bearer <access_token>` request metadata entry.
+service UserService {
+  rpc GetMe(GetMeRequest) returns (UserResponse);
+  rpc UpdateProfile(UpdateProfileRequest) returns (UserResponse);
+  rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse);
+}
+
+message RegisterRequest {
+  string email = 1;
+  string password = 2;
+  string name = 3;
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message RefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+message AuthResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  UserSummary user = 3;
+}
+
+message UserSummary {
+  string id = 1;
+  string email = 2;
+  string name = 3;
+  string role = 4;
+}
+
+message GetMeRequest {}
+
+message UpdateProfileRequest {
+  string name = 1;
+}
+
+message ChangePasswordRequest {
+  string current_password = 1;
+  string new_password = 2;
+}
+
+message ChangePasswordResponse {}
+
+message UserResponse {
+  string id = 1;
+  string email = 2;
+  string name = 3;
+  string role = 4;
+  bool is_active = 5;
+  string created_at = 6;
+  string updated_at = 7;
+}

@@ -6,6 +6,8 @@ pub struct AppConfig {
     pub host: String,
     #[serde(default = "default_port")]
     pub port: u16,
+    #[serde(default = "default_grpc_port")]
+    pub grpc_port: u16,
     pub jwt_secret: String,
     #[serde(default = "default_access_ttl")]
     pub jwt_access_ttl_seconds: i64,
@@ -22,6 +24,10 @@ fn default_host() -> String {
 
 fn default_port() -> u16 {
     8080
+}
+
+fn default_grpc_port() -> u16 {
+    50051
 }
 
 fn default_access_ttl() -> i64 {
