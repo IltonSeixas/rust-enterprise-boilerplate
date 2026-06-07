@@ -1,27 +1,47 @@
+use std::time::Duration;
+
 use axum::{
     middleware,
     routing::{get, post, put},
     Router,
 };
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use metrics_exporter_prometheus::PrometheusHandle;
+use tower_governor::{governor::GovernorConfigBuilder, key_extractor::PeerIpKeyExtractor, GovernorLayer};
+use tower_http::trace::TraceLayer;
 
 use crate::interfaces::http::{
     handlers::{
         auth_handler::{login, refresh, register, AuthState},
         health_handler::{health, ready},
+        metrics_handler::metrics,
         user_handler::{change_password, get_me, get_user, update_me, UserState},
     },
-    middleware::{require_auth, AuthMiddlewareState},
+    middleware::{build_cors_layer, require_auth, security_headers, AuthMiddlewareState},
 };
+
+pub struct RouterConfig {
+    pub allowed_origins: Vec<String>,
+    pub rate_limit_per_second: u64,
+    pub rate_limit_burst: u32,
+}
 
 pub fn build_router(
     auth_state: AuthState,
     user_state: UserState,
     auth_mw_state: AuthMiddlewareState,
+    metrics_handle: PrometheusHandle,
+    router_cfg: RouterConfig,
 ) -> Router {
+    let governor_cfg = GovernorConfigBuilder::default()
+        .key_extractor(PeerIpKeyExtractor)
+        .period(Duration::from_secs(1) / router_cfg.rate_limit_per_second as u32)
+        .burst_size(router_cfg.rate_limit_burst)
+        .finish()
+        .expect("invalid rate limiter configuration");
     let public_routes = Router::new()
         .route("/health", get(health))
         .route("/ready", get(ready))
+        .route("/metrics", get(metrics).with_state(metrics_handle))
         .nest(
             "/v1/auth",
             Router::new()
@@ -46,5 +66,9 @@ pub fn build_router(
         .merge(public_routes)
         .merge(protected_routes)
         .layer(TraceLayer::new_for_http())
-        .layer(CorsLayer::permissive())
+        .layer(middleware::from_fn(security_headers))
+        .layer(build_cors_layer(&router_cfg.allowed_origins))
+        .layer(GovernorLayer {
+            config: governor_cfg.into(),
+        })
 }

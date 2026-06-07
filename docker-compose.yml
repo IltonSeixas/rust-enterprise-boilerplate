@@ -2,38 +2,18 @@ services:
   app:
     build: .
     ports:
-      - "3000:3000"
+      - "8080:8080"
       - "50051:50051"
     environment:
-      ADAPTER: postgres
-      DATABASE_URL: postgres://boilerplate:boilerplate@postgres:5432/boilerplate
       REDIS_URL: redis://redis:6379
       JWT_SECRET: dev-secret-change-in-production-min-32-chars
+      ALLOWED_ORIGINS: http://localhost:3000
       RUST_LOG: info
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
-      OTEL_SERVICE_NAME: rust-enterprise-boilerplate
+      OTLP_ENDPOINT: http://jaeger:4317
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
-
-  postgres:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_USER: boilerplate
-      POSTGRES_PASSWORD: boilerplate
-      POSTGRES_DB: boilerplate
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U boilerplate"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   redis:
     image: redis:7-alpine
@@ -79,6 +59,5 @@ services:
       - prometheus
 
 volumes:
-  postgres_data:
   redis_data:
   grafana_data:

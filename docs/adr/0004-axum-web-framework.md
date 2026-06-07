@@ -19,7 +19,7 @@ Rust's async web ecosystem offers several mature options. The choice affects erg
 - Axum is maintained by the Tokio team — deep integration with the Tokio ecosystem (`tower`, `hyper`, `tracing`).
 - Extractors and handlers are plain Rust functions — easy to test without spinning up a server.
 - Tower middleware is composable and reusable across services.
-- `tower-http` provides production-grade middleware (CORS, compression, tracing, rate limiting) out of the box.
+- `tower-http` provides production-grade middleware (CORS, compression, tracing) out of the box, and the wider Tower ecosystem supplies the rest — `tower_governor` adds per-IP rate limiting on top of the same `Layer`/`Service` abstractions.
 - Strong type safety: incorrect handler signatures are compile-time errors.
 
 **Negative:**

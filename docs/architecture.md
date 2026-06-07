@@ -34,54 +34,58 @@ This project implements Clean Architecture (also known as Hexagonal Architecture
 src/
 ├── domain/
 │   ├── entities/
-│   │   └── user.rs            # User aggregate root
+│   │   └── user.rs                       # User aggregate root
 │   ├── value_objects/
-│   │   ├── email.rs           # Email — validated on construction
-│   │   ├── password_hash.rs   # Opaque wrapper around hashed bytes
-│   │   └── user_id.rs         # UUID newtype
+│   │   ├── email.rs                      # Email — validated on construction
+│   │   ├── password_hash.rs              # Opaque wrapper around hashed bytes
+│   │   └── user_id.rs                    # UUID newtype
 │   ├── repositories/
-│   │   └── user_repository.rs # Trait: the only contract infra must fulfill
-│   └── errors.rs              # DomainError enum (thiserror)
+│   │   └── user_repository.rs            # Trait: the only contract infra must fulfill
+│   └── errors.rs                         # DomainError enum (thiserror)
 │
 ├── application/
 │   ├── use_cases/
 │   │   ├── register_user.rs
 │   │   ├── login_user.rs
 │   │   ├── refresh_token.rs
-│   │   └── logout_user.rs
+│   │   ├── get_user.rs
+│   │   ├── update_profile.rs
+│   │   └── change_password.rs
 │   ├── ports/
-│   │   ├── password_hasher.rs # Trait: hash + verify
-│   │   └── token_issuer.rs    # Trait: issue + validate JWT
+│   │   ├── password_hasher.rs            # Trait: hash + verify
+│   │   └── token_service.rs              # Trait: issue, validate and rotate JWTs
 │   └── dtos/
-│       ├── register_input.rs
-│       └── auth_output.rs
+│       ├── auth_dtos.rs
+│       └── user_dtos.rs
 │
 ├── infrastructure/
 │   ├── persistence/
-│   │   ├── in_memory/
-│   │   │   └── user_repository.rs
-│   │   └── postgres/
-│   │       └── user_repository.rs
+│   │   ├── in_memory_user_repository.rs  # Default: zero-config, runs immediately
+│   │   └── postgres_user_repository.rs   # Behind the "postgres" Cargo feature
 │   ├── security/
 │   │   ├── argon2_hasher.rs
-│   │   └── jwt_service.rs
-│   ├── observability/
-│   │   └── setup.rs           # OTLP exporter, tracing subscriber
-│   └── cache/
-│       └── redis_store.rs
+│   │   └── jwt_token_service.rs          # Issues/validates JWTs, stores refresh tokens in Redis
+│   └── telemetry/
+│       ├── tracing.rs                    # JSON logs + OTLP trace exporter
+│       └── metrics.rs                    # Prometheus recorder, served at /metrics
 │
 ├── interfaces/
 │   ├── http/
 │   │   ├── router.rs
 │   │   ├── middleware/
-│   │   │   ├── auth.rs
-│   │   │   ├── rate_limit.rs
-│   │   │   └── security_headers.rs
+│   │   │   ├── auth.rs                   # require_auth — validates bearer tokens
+│   │   │   ├── cors.rs                   # Explicit origin allow-list
+│   │   │   └── security_headers.rs       # X-Content-Type-Options, X-Frame-Options, HSTS, Referrer-Policy
 │   │   └── handlers/
 │   │       ├── auth_handler.rs
-│   │       └── user_handler.rs
+│   │       ├── user_handler.rs
+│   │       ├── health_handler.rs
+│   │       └── metrics_handler.rs
 │   └── grpc/
-│       └── user_service.rs
+│       ├── auth_service.rs
+│       ├── user_service.rs
+│       ├── interceptor.rs
+│       └── error.rs
 │
 └── main.rs
 ```

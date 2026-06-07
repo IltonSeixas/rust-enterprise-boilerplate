@@ -1,5 +1,6 @@
 pub mod auth_handler;
 pub mod health_handler;
+pub mod metrics_handler;
 pub mod user_handler;
 
 use axum::{http::StatusCode, response::IntoResponse, Json};

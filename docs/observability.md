@@ -15,17 +15,21 @@ Every HTTP request and gRPC call is automatically instrumented as a span. Use ca
 ### Setup
 
 ```rust
-// infrastructure/observability/setup.rs
-let tracer = opentelemetry_otlp::new_pipeline()
-    .tracing()
-    .with_exporter(
-        opentelemetry_otlp::new_exporter()
-            .tonic()
-            .with_endpoint(&config.otlp_endpoint),
-    )
-    .install_batch(opentelemetry_sdk::runtime::Tokio)?;
+// infrastructure/telemetry/tracing.rs
+let exporter = opentelemetry_otlp::new_exporter()
+    .tonic()
+    .with_endpoint(otlp_endpoint)
+    .build_span_exporter()?;
 
-let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+let provider = trace::TracerProvider::builder()
+    .with_batch_exporter(exporter, runtime::Tokio)
+    .with_config(trace::config().with_resource(Resource::new(vec![
+        KeyValue::new(SERVICE_NAME, service_name.to_string()),
+    ])))
+    .build();
+
+opentelemetry::global::set_tracer_provider(provider.clone());
+let otel_layer = tracing_opentelemetry::layer().with_tracer(provider.tracer("rust-enterprise-boilerplate"));
 ```
 
 ### Manual spans in use cases
@@ -45,16 +49,9 @@ The `#[instrument]` macro creates a span for every call and attaches the listed 
 
 ## Metrics
 
-Prometheus-format metrics are exposed at `GET /metrics`. The Axum middleware records request count and latency histograms automatically.
+`infrastructure/telemetry/metrics.rs` installs a global Prometheus recorder via `metrics_exporter_prometheus`. Its handle is exposed at `GET /metrics` in the Prometheus exposition format (`text/plain; version=0.0.4`).
 
-### Available metrics
-
-| Metric | Type | Description |
-|---|---|---|
-| `http_requests_total` | Counter | Total HTTP requests by method, path, status |
-| `http_request_duration_seconds` | Histogram | Request latency by method and path |
-| `http_requests_in_flight` | Gauge | Currently active requests |
-| `db_query_duration_seconds` | Histogram | Database query latency by operation |
+The boilerplate ships with the recorder wired end-to-end but does not emit any custom metrics yet — that is intentionally left to the application you build on top of it. Use the `metrics` crate's `counter!`, `histogram!`, and `gauge!` macros from any layer to record your own application metrics; they will be picked up by the same recorder and rendered at `/metrics` automatically.
 
 ### Scrape config (Prometheus)
 
@@ -62,7 +59,7 @@ Prometheus-format metrics are exposed at `GET /metrics`. The Axum middleware rec
 scrape_configs:
   - job_name: rust-api
     static_configs:
-      - targets: ['localhost:3000']
+      - targets: ['localhost:8080']
     metrics_path: /metrics
 ```
 
@@ -104,9 +101,7 @@ Set via `RUST_LOG=info` environment variable.
 
 | Variable | Default | Description |
 |---|---|---|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317` | OTLP gRPC endpoint |
-| `OTEL_SERVICE_NAME` | `rust-enterprise-boilerplate` | Service name in traces |
-| `OTEL_SERVICE_VERSION` | — | Injected by CI from git tag |
+| `OTLP_ENDPOINT` | `http://localhost:4317` | OTLP gRPC endpoint for the trace exporter |
 | `RUST_LOG` | `info` | Log level filter |
 
 ---
