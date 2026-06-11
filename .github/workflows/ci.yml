@@ -27,14 +27,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      redis:
-        image: redis:7-alpine
-        ports: ["6379:6379"]
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
       - uses: actions/checkout@v4
@@ -57,17 +49,29 @@ jobs:
       - name: Check formatting
         run: cargo fmt --check
 
-      - name: Clippy (deny warnings)
+      - name: Clippy (deny warnings, default features)
         run: cargo clippy -- -D warnings
+
+      - name: Clippy (deny warnings, postgres feature)
+        env:
+          SQLX_OFFLINE: "true"
+        run: cargo clippy --features postgres -- -D warnings
 
       - name: Unit tests
         run: cargo test
 
-      - name: Integration tests
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features rustls,postgres --locked
+
+      - name: Run migrations
         env:
-          TEST_DATABASE_URL: postgres://test:test@localhost:5432/test
-          TEST_REDIS_URL: redis://localhost:6379
-        run: cargo test --test integration
+          DATABASE_URL: postgres://test:test@localhost:5432/test
+        run: sqlx migrate run --source migrations
+
+      - name: Unit tests (postgres feature)
+        env:
+          DATABASE_URL: postgres://test:test@localhost:5432/test
+        run: cargo test --features postgres
 
   audit:
     name: Security Audit

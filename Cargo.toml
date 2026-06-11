@@ -32,7 +32,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # Database
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "macros"], optional = true }
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "macros", "migrate"], optional = true }
 
 # Redis
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }

@@ -6,7 +6,7 @@ Contributions are welcome. Please read this document before opening a pull reque
 
 ## Prerequisites
 
-- Rust 1.78+ (`rustup update stable`)
+- Rust 1.90+ (`rustup update stable`)
 - `cargo-llvm-cov` for coverage: `cargo install cargo-llvm-cov`
 - `cargo-audit` for security auditing: `cargo install cargo-audit`
 

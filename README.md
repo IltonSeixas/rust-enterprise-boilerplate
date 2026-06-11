@@ -1,5 +1,3 @@
-> **Work in progress** — this project is under active development and is not yet production-ready.
-
 # rust-enterprise-boilerplate
 
 [![CI](https://github.com/IltonSeixas/rust-enterprise-boilerplate/actions/workflows/ci.yml/badge.svg)](https://github.com/IltonSeixas/rust-enterprise-boilerplate/actions/workflows/ci.yml)
@@ -78,13 +76,13 @@ Nothing in `domain/` or `application/` imports from `infrastructure/` or `interf
 
 ### Prerequisites
 
-- Rust 1.78+ (`rustup update stable`)
+- Rust 1.90+ (`rustup update stable`)
 - Optional for production: PostgreSQL 15+, Redis 7+
 
 ### Run immediately (in-memory, zero config)
 
 ```bash
-git clone https://github.com/your-org/rust-enterprise-boilerplate
+git clone https://github.com/IltonSeixas/rust-enterprise-boilerplate
 cd rust-enterprise-boilerplate
 cargo run
 ```

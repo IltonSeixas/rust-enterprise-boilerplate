@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO users (id, email, password_hash, name, role, is_active, created_at, updated_at)\n               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n               ON CONFLICT (id) DO UPDATE SET\n                 email = EXCLUDED.email,\n                 password_hash = EXCLUDED.password_hash,\n                 name = EXCLUDED.name,\n                 role = EXCLUDED.role,\n                 is_active = EXCLUDED.is_active,\n                 updated_at = EXCLUDED.updated_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bool",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "16288db9024f6fdd2caf8b9804f0e273be59902ff7e360fa48f026981fbb10da"
+}

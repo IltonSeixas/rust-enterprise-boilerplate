@@ -13,8 +13,11 @@ use application::use_cases::{
     ChangePassword, GetUser, LoginUser, RefreshTokenUseCase, RegisterUser, UpdateProfile,
 };
 use config::AppConfig;
+#[cfg(not(feature = "postgres"))]
+use infrastructure::persistence::InMemoryUserRepository;
+#[cfg(feature = "postgres")]
+use infrastructure::persistence::PostgresUserRepository;
 use infrastructure::{
-    persistence::InMemoryUserRepository,
     security::{Argon2Hasher, JwtTokenService},
     telemetry::{init_prometheus, init_tracing},
 };
@@ -22,10 +25,7 @@ use interfaces::{
     grpc::{AuthGrpcService, AuthServiceServer, UserGrpcService, UserServiceServer},
     http::{
         build_router,
-        handlers::{
-            auth_handler::AuthState,
-            user_handler::UserState,
-        },
+        handlers::{auth_handler::AuthState, user_handler::UserState},
         middleware::AuthMiddlewareState,
         RouterConfig,
     },
@@ -46,17 +46,25 @@ async fn main() -> anyhow::Result<()> {
     let redis_client = redis::Client::open(redis_url)?;
     let redis_conn = redis::aio::ConnectionManager::new(redis_client).await?;
 
+    #[cfg(feature = "postgres")]
+    let user_repo: Arc<dyn domain::repositories::UserRepository> = {
+        let pool = sqlx::PgPool::connect(&cfg.database_url).await?;
+        sqlx::migrate!("./migrations").run(&pool).await?;
+        Arc::new(PostgresUserRepository::new(pool)) as Arc<dyn domain::repositories::UserRepository>
+    };
+
+    #[cfg(not(feature = "postgres"))]
     let user_repo: Arc<dyn domain::repositories::UserRepository> =
         Arc::new(InMemoryUserRepository::new()) as Arc<dyn domain::repositories::UserRepository>;
     let hasher: Arc<dyn application::ports::PasswordHasher> =
         Arc::new(Argon2Hasher::new()) as Arc<dyn application::ports::PasswordHasher>;
-    let token_svc: Arc<dyn application::ports::TokenService> =
-        Arc::new(JwtTokenService::new(
-            &cfg.jwt_secret,
-            cfg.jwt_access_ttl_seconds,
-            cfg.jwt_refresh_ttl_seconds,
-            redis_conn,
-        )) as Arc<dyn application::ports::TokenService>;
+    let token_svc: Arc<dyn application::ports::TokenService> = Arc::new(JwtTokenService::new(
+        &cfg.jwt_secret,
+        cfg.jwt_access_ttl_seconds,
+        cfg.jwt_refresh_ttl_seconds,
+        redis_conn,
+    ))
+        as Arc<dyn application::ports::TokenService>;
 
     let auth_state = AuthState {
         register: Arc::new(RegisterUser::new(
@@ -122,7 +130,10 @@ async fn main() -> anyhow::Result<()> {
     let grpc_addr: std::net::SocketAddr = format!("{}:{}", cfg.host, cfg.grpc_port).parse()?;
     tracing::info!(address = %grpc_addr, "grpc server listening");
 
-    let http_server = axum::serve(listener, router);
+    let http_server = axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    );
     let grpc_server = GrpcServer::builder()
         .add_service(AuthServiceServer::new(auth_grpc))
         .add_service(UserServiceServer::new(user_grpc))

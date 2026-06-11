@@ -1,5 +1,5 @@
 # Stage 1: build
-FROM rust:1.78-slim AS builder
+FROM rust:1.90-slim AS builder
 
 WORKDIR /app
 
@@ -7,11 +7,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY Cargo.toml Cargo.lock ./
+COPY Cargo.toml Cargo.lock build.rs ./
+COPY proto ./proto
 RUN mkdir src && echo "fn main() {}" > src/main.rs
 RUN cargo build --release && rm -rf src
 
 COPY src ./src
+COPY migrations ./migrations
+COPY .sqlx ./.sqlx
+ENV SQLX_OFFLINE=true
 RUN touch src/main.rs && cargo build --release
 
 # Stage 2: runtime
