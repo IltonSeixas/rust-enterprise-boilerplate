@@ -40,14 +40,16 @@ impl TryFrom<UserRow> for User {
             _ => Role::User,
         };
         Ok(User::reconstitute(
-            UserId::from_uuid(row.id),
-            email,
-            hash,
-            row.name,
-            role,
-            row.is_active,
-            row.created_at,
-            row.updated_at,
+            crate::domain::entities::user::UserSnapshot {
+                id: UserId::from_uuid(row.id),
+                email,
+                password_hash: hash,
+                name: row.name,
+                role,
+                is_active: row.is_active,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+            },
         ))
     }
 }

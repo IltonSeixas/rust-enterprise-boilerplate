@@ -21,11 +21,7 @@ impl Role {
 
     #[allow(dead_code)]
     pub fn can_promote_to(&self, target: &Role) -> bool {
-        match (self, target) {
-            (Role::Owner, _) => true,
-            (Role::Admin, Role::User) => true,
-            _ => false,
-        }
+        matches!((self, target), (Role::Owner, _) | (Role::Admin, Role::User))
     }
 }
 
@@ -51,6 +47,19 @@ pub struct User {
     updated_at: DateTime<Utc>,
 }
 
+/// Field set used to rehydrate a `User` from persistence via `User::reconstitute`.
+#[allow(dead_code)]
+pub struct UserSnapshot {
+    pub id: UserId,
+    pub email: Email,
+    pub password_hash: PasswordHash,
+    pub name: String,
+    pub role: Role,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
 impl User {
     pub fn new(
         email: Email,
@@ -73,25 +82,16 @@ impl User {
     }
 
     #[allow(dead_code)]
-    pub fn reconstitute(
-        id: UserId,
-        email: Email,
-        password_hash: PasswordHash,
-        name: String,
-        role: Role,
-        is_active: bool,
-        created_at: DateTime<Utc>,
-        updated_at: DateTime<Utc>,
-    ) -> Self {
+    pub fn reconstitute(snapshot: UserSnapshot) -> Self {
         Self {
-            id,
-            email,
-            password_hash,
-            name,
-            role,
-            is_active,
-            created_at,
-            updated_at,
+            id: snapshot.id,
+            email: snapshot.email,
+            password_hash: snapshot.password_hash,
+            name: snapshot.name,
+            role: snapshot.role,
+            is_active: snapshot.is_active,
+            created_at: snapshot.created_at,
+            updated_at: snapshot.updated_at,
         }
     }
 
@@ -214,7 +214,10 @@ mod tests {
         let mut target = make_user(Role::User);
         let actor = make_user(Role::Admin);
         assert!(target.change_role(Role::User, &actor).is_ok());
-        assert_eq!(target.change_role(Role::Admin, &actor).unwrap_err(), DomainError::InsufficientPermissions);
+        assert_eq!(
+            target.change_role(Role::Admin, &actor).unwrap_err(),
+            DomainError::InsufficientPermissions
+        );
     }
 
     #[test]
@@ -271,16 +274,16 @@ mod tests {
         let email = Email::new("reconstitute@example.com").unwrap();
         let hash = PasswordHash::from_phc_string("$argon2id$v=19$...".into());
         let now = Utc::now();
-        let user = User::reconstitute(
+        let user = User::reconstitute(UserSnapshot {
             id,
-            email.clone(),
-            hash.clone(),
-            "Reconstituted".into(),
-            Role::Admin,
-            false,
-            now,
-            now,
-        );
+            email: email.clone(),
+            password_hash: hash.clone(),
+            name: "Reconstituted".into(),
+            role: Role::Admin,
+            is_active: false,
+            created_at: now,
+            updated_at: now,
+        });
         assert_eq!(user.id(), id);
         assert_eq!(user.email(), &email);
         assert_eq!(user.name(), "Reconstituted");

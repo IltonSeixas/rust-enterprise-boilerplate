@@ -15,7 +15,10 @@ pub struct RefreshTokenUseCase {
 
 impl RefreshTokenUseCase {
     pub fn new(user_repo: Arc<dyn UserRepository>, token_svc: Arc<dyn TokenService>) -> Self {
-        Self { user_repo, token_svc }
+        Self {
+            user_repo,
+            token_svc,
+        }
     }
 
     pub async fn execute(&self, req: RefreshTokenRequest) -> Result<AuthResponse, DomainError> {
@@ -32,7 +35,9 @@ impl RefreshTokenUseCase {
             .ok_or(DomainError::UserNotFound)?;
 
         if !user.is_active() {
-            self.token_svc.revoke_refresh_token(&req.refresh_token).await?;
+            self.token_svc
+                .revoke_refresh_token(&req.refresh_token)
+                .await?;
             return Err(DomainError::AccountInactive);
         }
 
@@ -95,20 +100,22 @@ mod tests {
         let email = Email::new("user@example.com").unwrap();
         let hash = PasswordHash::from_phc_string("$argon2id$v=19$...".into());
         let now = chrono::Utc::now();
-        crate::domain::entities::User::reconstitute(
-            UserId::from_uuid(id),
+        crate::domain::entities::User::reconstitute(crate::domain::entities::user::UserSnapshot {
+            id: UserId::from_uuid(id),
             email,
-            hash,
-            "Test User".into(),
-            Role::User,
-            active,
-            now,
-            now,
-        )
+            password_hash: hash,
+            name: "Test User".into(),
+            role: Role::User,
+            is_active: active,
+            created_at: now,
+            updated_at: now,
+        })
     }
 
     fn request() -> RefreshTokenRequest {
-        RefreshTokenRequest { refresh_token: "old-refresh-token".into() }
+        RefreshTokenRequest {
+            refresh_token: "old-refresh-token".into(),
+        }
     }
 
     #[tokio::test]
@@ -121,7 +128,10 @@ mod tests {
             .returning(|_| Err(DomainError::InvalidCredentials));
 
         let uc = RefreshTokenUseCase::new(Arc::new(repo), Arc::new(token_svc));
-        assert_eq!(uc.execute(request()).await.unwrap_err(), DomainError::InvalidCredentials);
+        assert_eq!(
+            uc.execute(request()).await.unwrap_err(),
+            DomainError::InvalidCredentials
+        );
     }
 
     #[tokio::test]
@@ -132,11 +142,19 @@ mod tests {
 
         token_svc
             .expect_validate_access_token()
-            .returning(move |_| Ok(AccessTokenClaims { user_id, role: Role::User }));
+            .returning(move |_| {
+                Ok(AccessTokenClaims {
+                    user_id,
+                    role: Role::User,
+                })
+            });
         repo.expect_find_by_id().returning(|_| Ok(None));
 
         let uc = RefreshTokenUseCase::new(Arc::new(repo), Arc::new(token_svc));
-        assert_eq!(uc.execute(request()).await.unwrap_err(), DomainError::UserNotFound);
+        assert_eq!(
+            uc.execute(request()).await.unwrap_err(),
+            DomainError::UserNotFound
+        );
     }
 
     #[tokio::test]
@@ -147,13 +165,23 @@ mod tests {
 
         token_svc
             .expect_validate_access_token()
-            .returning(move |_| Ok(AccessTokenClaims { user_id, role: Role::User }));
+            .returning(move |_| {
+                Ok(AccessTokenClaims {
+                    user_id,
+                    role: Role::User,
+                })
+            });
         repo.expect_find_by_id()
             .returning(move |_| Ok(Some(make_user(user_id, false))));
-        token_svc.expect_revoke_refresh_token().returning(|_| Ok(()));
+        token_svc
+            .expect_revoke_refresh_token()
+            .returning(|_| Ok(()));
 
         let uc = RefreshTokenUseCase::new(Arc::new(repo), Arc::new(token_svc));
-        assert_eq!(uc.execute(request()).await.unwrap_err(), DomainError::AccountInactive);
+        assert_eq!(
+            uc.execute(request()).await.unwrap_err(),
+            DomainError::AccountInactive
+        );
     }
 
     #[tokio::test]
@@ -164,12 +192,22 @@ mod tests {
 
         token_svc
             .expect_validate_access_token()
-            .returning(move |_| Ok(AccessTokenClaims { user_id, role: Role::User }));
+            .returning(move |_| {
+                Ok(AccessTokenClaims {
+                    user_id,
+                    role: Role::User,
+                })
+            });
         repo.expect_find_by_id()
             .returning(move |_| Ok(Some(make_user(user_id, true))));
-        token_svc.expect_rotate_refresh_token().returning(|_, _, _| {
-            Ok(TokenPair { access_token: "new-access".into(), refresh_token: "new-refresh".into() })
-        });
+        token_svc
+            .expect_rotate_refresh_token()
+            .returning(|_, _, _| {
+                Ok(TokenPair {
+                    access_token: "new-access".into(),
+                    refresh_token: "new-refresh".into(),
+                })
+            });
 
         let uc = RefreshTokenUseCase::new(Arc::new(repo), Arc::new(token_svc));
         let result = uc.execute(request()).await.unwrap();
