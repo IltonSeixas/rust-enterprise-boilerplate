@@ -25,7 +25,11 @@ impl RegisterUser {
         hasher: Arc<dyn PasswordHasher>,
         token_svc: Arc<dyn TokenService>,
     ) -> Self {
-        Self { user_repo, hasher, token_svc }
+        Self {
+            user_repo,
+            hasher,
+            token_svc,
+        }
     }
 
     pub async fn execute(&self, req: RegisterRequest) -> Result<AuthResponse, DomainError> {
@@ -53,7 +57,10 @@ impl RegisterUser {
         };
         let _ = claimed_owner;
 
-        let tokens = self.token_svc.generate_pair(user.id().value(), user.role()).await?;
+        let tokens = self
+            .token_svc
+            .generate_pair(user.id().value(), user.role())
+            .await?;
 
         Ok(AuthResponse {
             access_token: tokens.access_token,
@@ -119,7 +126,10 @@ mod tests {
             password: "short".into(),
             name: "Test".into(),
         };
-        assert_eq!(uc.execute(req).await.unwrap_err(), DomainError::InvalidPasswordLength);
+        assert_eq!(
+            uc.execute(req).await.unwrap_err(),
+            DomainError::InvalidPasswordLength
+        );
     }
 
     #[tokio::test]
@@ -141,7 +151,10 @@ mod tests {
             password: "strongpassword1234".into(),
             name: "Test".into(),
         };
-        assert_eq!(uc.execute(req).await.unwrap_err(), DomainError::EmailAlreadyExists);
+        assert_eq!(
+            uc.execute(req).await.unwrap_err(),
+            DomainError::EmailAlreadyExists
+        );
     }
 
     #[tokio::test]

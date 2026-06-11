@@ -66,7 +66,10 @@ pub async fn require_auth(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    req.extensions_mut().insert(AuthenticatedUser { id: claims.user_id, role: claims.role });
+    req.extensions_mut().insert(AuthenticatedUser {
+        id: claims.user_id,
+        role: claims.role,
+    });
 
     Ok(next.run(req).await)
 }

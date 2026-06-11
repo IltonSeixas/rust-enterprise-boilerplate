@@ -18,9 +18,10 @@ pub fn error_response(err: DomainError) -> axum::response::Response {
         DomainError::InvalidCredentials => (StatusCode::UNAUTHORIZED, err.to_string()),
         DomainError::AccountInactive => (StatusCode::FORBIDDEN, err.to_string()),
         DomainError::InsufficientPermissions => (StatusCode::FORBIDDEN, err.to_string()),
-        DomainError::Repository(_) => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error".into())
-        }
+        DomainError::Repository(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal server error".into(),
+        ),
     };
 
     (status, Json(json!({ "error": message }))).into_response()

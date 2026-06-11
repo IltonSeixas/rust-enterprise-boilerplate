@@ -43,5 +43,8 @@ pub async fn authenticate<T>(
         return Err(Status::permission_denied("account is inactive"));
     }
 
-    Ok(AuthenticatedCaller { id: claims.user_id, role: claims.role })
+    Ok(AuthenticatedCaller {
+        id: claims.user_id,
+        role: claims.role,
+    })
 }

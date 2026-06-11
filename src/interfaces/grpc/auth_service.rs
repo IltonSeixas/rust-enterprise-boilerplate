@@ -3,7 +3,10 @@ use std::sync::Arc;
 use tonic::{Request, Response, Status};
 
 use crate::application::{
-    dtos::{AuthResponse as AuthDto, LoginRequest as LoginDto, RefreshTokenRequest as RefreshDto, RegisterRequest as RegisterDto, UserSummary},
+    dtos::{
+        AuthResponse as AuthDto, LoginRequest as LoginDto, RefreshTokenRequest as RefreshDto,
+        RegisterRequest as RegisterDto, UserSummary,
+    },
     use_cases::{LoginUser, RefreshTokenUseCase, RegisterUser},
 };
 
@@ -45,15 +48,25 @@ impl AuthService for AuthGrpcService {
         request: Request<RegisterRequest>,
     ) -> Result<Response<AuthResponse>, Status> {
         let req = request.into_inner();
-        let dto = RegisterDto { email: req.email, password: req.password, name: req.name };
+        let dto = RegisterDto {
+            email: req.email,
+            password: req.password,
+            name: req.name,
+        };
 
         let resp = self.register.execute(dto).await.map_err(to_status)?;
         Ok(Response::new(to_proto_response(resp)))
     }
 
-    async fn login(&self, request: Request<LoginRequest>) -> Result<Response<AuthResponse>, Status> {
+    async fn login(
+        &self,
+        request: Request<LoginRequest>,
+    ) -> Result<Response<AuthResponse>, Status> {
         let req = request.into_inner();
-        let dto = LoginDto { email: req.email, password: req.password };
+        let dto = LoginDto {
+            email: req.email,
+            password: req.password,
+        };
 
         let resp = self.login.execute(dto).await.map_err(to_status)?;
         Ok(Response::new(to_proto_response(resp)))
@@ -64,7 +77,9 @@ impl AuthService for AuthGrpcService {
         request: Request<RefreshTokenRequest>,
     ) -> Result<Response<AuthResponse>, Status> {
         let req = request.into_inner();
-        let dto = RefreshDto { refresh_token: req.refresh_token };
+        let dto = RefreshDto {
+            refresh_token: req.refresh_token,
+        };
 
         let resp = self.refresh.execute(dto).await.map_err(to_status)?;
         Ok(Response::new(to_proto_response(resp)))

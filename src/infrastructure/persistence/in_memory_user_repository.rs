@@ -5,7 +5,12 @@ use async_trait::async_trait;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use crate::domain::{entities::{Role, User}, errors::DomainError, repositories::UserRepository, value_objects::Email};
+use crate::domain::{
+    entities::{Role, User},
+    errors::DomainError,
+    repositories::UserRepository,
+    value_objects::Email,
+};
 
 pub struct InMemoryUserRepository {
     store: Arc<RwLock<HashMap<Uuid, User>>>,
@@ -13,7 +18,9 @@ pub struct InMemoryUserRepository {
 
 impl InMemoryUserRepository {
     pub fn new() -> Self {
-        Self { store: Arc::new(RwLock::new(HashMap::new())) }
+        Self {
+            store: Arc::new(RwLock::new(HashMap::new())),
+        }
     }
 }
 
@@ -35,7 +42,10 @@ impl UserRepository for InMemoryUserRepository {
     }
 
     async fn save(&self, user: &User) -> Result<(), DomainError> {
-        self.store.write().await.insert(user.id().value(), user.clone());
+        self.store
+            .write()
+            .await
+            .insert(user.id().value(), user.clone());
         Ok(())
     }
 

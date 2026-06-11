@@ -6,7 +6,9 @@ use axum::{
     Router,
 };
 use metrics_exporter_prometheus::PrometheusHandle;
-use tower_governor::{governor::GovernorConfigBuilder, key_extractor::PeerIpKeyExtractor, GovernorLayer};
+use tower_governor::{
+    governor::GovernorConfigBuilder, key_extractor::PeerIpKeyExtractor, GovernorLayer,
+};
 use tower_http::trace::TraceLayer;
 
 use crate::interfaces::http::{

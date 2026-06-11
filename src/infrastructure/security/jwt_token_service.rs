@@ -73,17 +73,23 @@ impl TokenService for JwtTokenService {
             .await
             .map_err(|e| DomainError::Repository(e.to_string()))?;
 
-        Ok(TokenPair { access_token, refresh_token })
+        Ok(TokenPair {
+            access_token,
+            refresh_token,
+        })
     }
 
     async fn validate_access_token(&self, token: &str) -> Result<AccessTokenClaims, DomainError> {
         let data = decode::<JwtClaims>(token, &self.decoding_key, &Validation::default())
             .map_err(|_| DomainError::InvalidCredentials)?;
 
-        let user_id = Uuid::parse_str(&data.claims.sub)
-            .map_err(|_| DomainError::InvalidCredentials)?;
+        let user_id =
+            Uuid::parse_str(&data.claims.sub).map_err(|_| DomainError::InvalidCredentials)?;
 
-        Ok(AccessTokenClaims { user_id, role: data.claims.role })
+        Ok(AccessTokenClaims {
+            user_id,
+            role: data.claims.role,
+        })
     }
 
     async fn rotate_refresh_token(
@@ -95,8 +101,10 @@ impl TokenService for JwtTokenService {
         let mut conn = self.redis.clone();
         let key = Self::redis_key(old_token);
 
-        let stored: Option<String> =
-            conn.get(&key).await.map_err(|e| DomainError::Repository(e.to_string()))?;
+        let stored: Option<String> = conn
+            .get(&key)
+            .await
+            .map_err(|e| DomainError::Repository(e.to_string()))?;
 
         if stored.as_deref() != Some(&user_id.to_string()) {
             return Err(DomainError::InvalidCredentials);

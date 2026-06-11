@@ -43,6 +43,9 @@ impl PasswordHasher for Argon2Hasher {
     async fn verify(&self, password: &str, hash: &PasswordHash) -> Result<bool, DomainError> {
         let parsed =
             Argon2Hash::new(hash.value()).map_err(|e| DomainError::Repository(e.to_string()))?;
-        Ok(self.argon2.verify_password(password.as_bytes(), &parsed).is_ok())
+        Ok(self
+            .argon2
+            .verify_password(password.as_bytes(), &parsed)
+            .is_ok())
     }
 }
