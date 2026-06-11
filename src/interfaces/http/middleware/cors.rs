@@ -23,7 +23,10 @@ pub fn build_cors_layer(allowed_origins: &[String]) -> CorsLayer {
         .allow_origin(AllowOrigin::list(origins))
         .allow_credentials(true)
         .allow_methods(ALLOWED_METHODS)
-        .allow_headers([HeaderName::from_static("authorization"), HeaderName::from_static("content-type")])
+        .allow_headers([
+            HeaderName::from_static("authorization"),
+            HeaderName::from_static("content-type"),
+        ])
 }
 
 #[cfg(test)]

@@ -4,7 +4,10 @@ use tonic::{Request, Response, Status};
 
 use crate::{
     application::{
-        dtos::{ChangePasswordRequest as ChangePasswordDto, UpdateProfileRequest as UpdateProfileDto, UserResponse as UserResponseDto},
+        dtos::{
+            ChangePasswordRequest as ChangePasswordDto, UpdateProfileRequest as UpdateProfileDto,
+            UserResponse as UserResponseDto,
+        },
         ports::TokenService,
         use_cases::{ChangePassword, GetUser, UpdateProfile},
     },
@@ -57,7 +60,9 @@ impl UserService for UserGrpcService {
         request: Request<UpdateProfileRequest>,
     ) -> Result<Response<UserResponse>, Status> {
         let caller = authenticate(&request, &self.token_svc, &self.user_repo).await?;
-        let dto = UpdateProfileDto { name: request.into_inner().name };
+        let dto = UpdateProfileDto {
+            name: request.into_inner().name,
+        };
 
         let resp = self
             .update_profile

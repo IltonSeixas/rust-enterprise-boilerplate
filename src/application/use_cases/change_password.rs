@@ -28,7 +28,10 @@ impl ChangePassword {
             .await?
             .ok_or(DomainError::UserNotFound)?;
 
-        let valid = self.hasher.verify(&req.current_password, user.password_hash()).await?;
+        let valid = self
+            .hasher
+            .verify(&req.current_password, user.password_hash())
+            .await?;
         if !valid {
             return Err(DomainError::InvalidCredentials);
         }
@@ -79,7 +82,10 @@ mod tests {
     }
 
     fn request(current: &str, new: &str) -> ChangePasswordRequest {
-        ChangePasswordRequest { current_password: current.into(), new_password: new.into() }
+        ChangePasswordRequest {
+            current_password: current.into(),
+            new_password: new.into(),
+        }
     }
 
     #[tokio::test]
@@ -88,7 +94,9 @@ mod tests {
         let hasher = MockHasher::new();
 
         let uc = ChangePassword::new(Arc::new(repo), Arc::new(hasher));
-        let result = uc.execute(Uuid::new_v4(), request("currentpassword1", "short")).await;
+        let result = uc
+            .execute(Uuid::new_v4(), request("currentpassword1", "short"))
+            .await;
         assert_eq!(result.unwrap_err(), DomainError::InvalidPasswordLength);
     }
 
@@ -99,7 +107,12 @@ mod tests {
         repo.expect_find_by_id().returning(|_| Ok(None));
 
         let uc = ChangePassword::new(Arc::new(repo), Arc::new(hasher));
-        let result = uc.execute(Uuid::new_v4(), request("currentpassword1", "newpassword1234")).await;
+        let result = uc
+            .execute(
+                Uuid::new_v4(),
+                request("currentpassword1", "newpassword1234"),
+            )
+            .await;
         assert_eq!(result.unwrap_err(), DomainError::UserNotFound);
     }
 
@@ -108,11 +121,14 @@ mod tests {
         let mut repo = MockUserRepo::new();
         let mut hasher = MockHasher::new();
         let user = make_user();
-        repo.expect_find_by_id().returning(move |_| Ok(Some(user.clone())));
+        repo.expect_find_by_id()
+            .returning(move |_| Ok(Some(user.clone())));
         hasher.expect_verify().returning(|_, _| Ok(false));
 
         let uc = ChangePassword::new(Arc::new(repo), Arc::new(hasher));
-        let result = uc.execute(Uuid::new_v4(), request("wrongpassword1", "newpassword1234")).await;
+        let result = uc
+            .execute(Uuid::new_v4(), request("wrongpassword1", "newpassword1234"))
+            .await;
         assert_eq!(result.unwrap_err(), DomainError::InvalidCredentials);
     }
 
@@ -121,7 +137,8 @@ mod tests {
         let mut repo = MockUserRepo::new();
         let mut hasher = MockHasher::new();
         let user = make_user();
-        repo.expect_find_by_id().returning(move |_| Ok(Some(user.clone())));
+        repo.expect_find_by_id()
+            .returning(move |_| Ok(Some(user.clone())));
         hasher.expect_verify().returning(|_, _| Ok(true));
         hasher
             .expect_hash()
@@ -131,7 +148,12 @@ mod tests {
             .returning(|_| Ok(()));
 
         let uc = ChangePassword::new(Arc::new(repo), Arc::new(hasher));
-        let result = uc.execute(Uuid::new_v4(), request("currentpassword1", "newpassword1234")).await;
+        let result = uc
+            .execute(
+                Uuid::new_v4(),
+                request("currentpassword1", "newpassword1234"),
+            )
+            .await;
         assert!(result.is_ok());
     }
 }

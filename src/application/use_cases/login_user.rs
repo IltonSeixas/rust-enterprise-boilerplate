@@ -20,7 +20,11 @@ impl LoginUser {
         hasher: Arc<dyn PasswordHasher>,
         token_svc: Arc<dyn TokenService>,
     ) -> Self {
-        Self { user_repo, hasher, token_svc }
+        Self {
+            user_repo,
+            hasher,
+            token_svc,
+        }
     }
 
     pub async fn execute(&self, req: LoginRequest) -> Result<AuthResponse, DomainError> {
@@ -36,12 +40,18 @@ impl LoginUser {
             return Err(DomainError::AccountInactive);
         }
 
-        let valid = self.hasher.verify(&req.password, user.password_hash()).await?;
+        let valid = self
+            .hasher
+            .verify(&req.password, user.password_hash())
+            .await?;
         if !valid {
             return Err(DomainError::InvalidCredentials);
         }
 
-        let tokens = self.token_svc.generate_pair(user.id().value(), user.role()).await?;
+        let tokens = self
+            .token_svc
+            .generate_pair(user.id().value(), user.role())
+            .await?;
 
         Ok(AuthResponse {
             access_token: tokens.access_token,
@@ -109,7 +119,10 @@ mod tests {
     }
 
     fn login_request() -> LoginRequest {
-        LoginRequest { email: "user@example.com".into(), password: "strongpassword1234".into() }
+        LoginRequest {
+            email: "user@example.com".into(),
+            password: "strongpassword1234".into(),
+        }
     }
 
     #[tokio::test]
@@ -121,7 +134,10 @@ mod tests {
         repo.expect_find_by_email().returning(|_| Ok(None));
 
         let uc = LoginUser::new(Arc::new(repo), Arc::new(hasher), Arc::new(token_svc));
-        assert_eq!(uc.execute(login_request()).await.unwrap_err(), DomainError::InvalidCredentials);
+        assert_eq!(
+            uc.execute(login_request()).await.unwrap_err(),
+            DomainError::InvalidCredentials
+        );
     }
 
     #[tokio::test]
@@ -130,10 +146,14 @@ mod tests {
         let hasher = MockHasher::new();
         let token_svc = MockTokenSvc::new();
 
-        repo.expect_find_by_email().returning(|_| Ok(Some(make_user(Role::User, false))));
+        repo.expect_find_by_email()
+            .returning(|_| Ok(Some(make_user(Role::User, false))));
 
         let uc = LoginUser::new(Arc::new(repo), Arc::new(hasher), Arc::new(token_svc));
-        assert_eq!(uc.execute(login_request()).await.unwrap_err(), DomainError::AccountInactive);
+        assert_eq!(
+            uc.execute(login_request()).await.unwrap_err(),
+            DomainError::AccountInactive
+        );
     }
 
     #[tokio::test]
@@ -142,11 +162,15 @@ mod tests {
         let mut hasher = MockHasher::new();
         let token_svc = MockTokenSvc::new();
 
-        repo.expect_find_by_email().returning(|_| Ok(Some(make_user(Role::User, true))));
+        repo.expect_find_by_email()
+            .returning(|_| Ok(Some(make_user(Role::User, true))));
         hasher.expect_verify().returning(|_, _| Ok(false));
 
         let uc = LoginUser::new(Arc::new(repo), Arc::new(hasher), Arc::new(token_svc));
-        assert_eq!(uc.execute(login_request()).await.unwrap_err(), DomainError::InvalidCredentials);
+        assert_eq!(
+            uc.execute(login_request()).await.unwrap_err(),
+            DomainError::InvalidCredentials
+        );
     }
 
     #[tokio::test]
@@ -155,7 +179,8 @@ mod tests {
         let mut hasher = MockHasher::new();
         let mut token_svc = MockTokenSvc::new();
 
-        repo.expect_find_by_email().returning(|_| Ok(Some(make_user(Role::User, true))));
+        repo.expect_find_by_email()
+            .returning(|_| Ok(Some(make_user(Role::User, true))));
         hasher.expect_verify().returning(|_, _| Ok(true));
         token_svc.expect_generate_pair().returning(|_, _| {
             Ok(crate::application::ports::TokenPair {

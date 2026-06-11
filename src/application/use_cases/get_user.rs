@@ -69,7 +69,10 @@ mod tests {
         repo.expect_find_by_id().returning(|_| Ok(None));
 
         let uc = GetUser::new(Arc::new(repo));
-        assert_eq!(uc.execute(Uuid::new_v4()).await.unwrap_err(), DomainError::UserNotFound);
+        assert_eq!(
+            uc.execute(Uuid::new_v4()).await.unwrap_err(),
+            DomainError::UserNotFound
+        );
     }
 
     #[tokio::test]
@@ -77,7 +80,8 @@ mod tests {
         let mut repo = MockUserRepo::new();
         let user = make_user();
         let expected_id = user.id().value();
-        repo.expect_find_by_id().returning(move |_| Ok(Some(user.clone())));
+        repo.expect_find_by_id()
+            .returning(move |_| Ok(Some(user.clone())));
 
         let uc = GetUser::new(Arc::new(repo));
         let result = uc.execute(expected_id).await.unwrap();
