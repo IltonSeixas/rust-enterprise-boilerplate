@@ -39,7 +39,7 @@ redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
 
 # Security
 argon2 = "0.5"
-jsonwebtoken = "9"
+jsonwebtoken = "10"
 uuid = { version = "1", features = ["v4", "serde"] }
 rand = "0.8"
 
