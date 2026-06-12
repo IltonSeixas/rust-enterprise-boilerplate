@@ -82,4 +82,8 @@ jobs:
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
       - name: Audit dependencies
-        run: cargo audit
+        # RUSTSEC-2023-0071 (rsa Marvin Attack): unconditional dependency of
+        # sqlx-macros-core via the MySQL driver, used only by its auth
+        # handshake. This project uses the postgres feature exclusively and
+        # never exercises this code path. No fixed version is available upstream.
+        run: cargo audit --ignore RUSTSEC-2023-0071
