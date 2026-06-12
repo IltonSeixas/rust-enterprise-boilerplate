@@ -10,7 +10,8 @@ mod infrastructure;
 mod interfaces;
 
 use application::use_cases::{
-    ChangePassword, GetUser, LoginUser, RefreshTokenUseCase, RegisterUser, UpdateProfile,
+    ChangePassword, ChangeUserRole, GetUser, LoginUser, RefreshTokenUseCase, RegisterUser,
+    UpdateProfile,
 };
 use config::AppConfig;
 #[cfg(not(feature = "postgres"))]
@@ -90,6 +91,7 @@ async fn main() -> anyhow::Result<()> {
             Arc::clone(&user_repo),
             Arc::clone(&hasher),
         )),
+        change_role: Arc::new(ChangeUserRole::new(Arc::clone(&user_repo))),
     };
 
     let auth_mw_state = AuthMiddlewareState {
@@ -106,6 +108,7 @@ async fn main() -> anyhow::Result<()> {
         get_user: Arc::clone(&user_state.get_user),
         update_profile: Arc::clone(&user_state.update_profile),
         change_password: Arc::clone(&user_state.change_password),
+        change_role: Arc::clone(&user_state.change_role),
         token_svc: Arc::clone(&token_svc),
         user_repo: Arc::clone(&user_repo),
     };

@@ -22,15 +22,15 @@ impl RefreshTokenUseCase {
     }
 
     pub async fn execute(&self, req: RefreshTokenRequest) -> Result<AuthResponse, DomainError> {
-        let claims = self
+        let user_id = self
             .token_svc
-            .validate_access_token(&req.refresh_token)
-            .await
-            .map_err(|_| DomainError::InvalidCredentials)?;
+            .find_user_id_by_refresh_token(&req.refresh_token)
+            .await?
+            .ok_or(DomainError::InvalidCredentials)?;
 
         let user = self
             .user_repo
-            .find_by_id(claims.user_id)
+            .find_by_id(user_id)
             .await?
             .ok_or(DomainError::UserNotFound)?;
 
@@ -43,7 +43,7 @@ impl RefreshTokenUseCase {
 
         let tokens = self
             .token_svc
-            .rotate_refresh_token(&req.refresh_token, claims.user_id, user.role())
+            .rotate_refresh_token(&req.refresh_token, user_id, user.role())
             .await?;
 
         Ok(AuthResponse {
@@ -63,7 +63,7 @@ impl RefreshTokenUseCase {
 mod tests {
     use super::*;
     use crate::{
-        application::ports::{AccessTokenClaims, TokenPair},
+        application::ports::TokenPair,
         domain::{
             entities::Role,
             value_objects::{Email, PasswordHash, UserId},
@@ -90,7 +90,8 @@ mod tests {
         #[async_trait::async_trait]
         impl TokenService for TokenSvc {
             async fn generate_pair(&self, user_id: uuid::Uuid, role: &Role) -> Result<TokenPair, DomainError>;
-            async fn validate_access_token(&self, token: &str) -> Result<AccessTokenClaims, DomainError>;
+            async fn validate_access_token(&self, token: &str) -> Result<crate::application::ports::AccessTokenClaims, DomainError>;
+            async fn find_user_id_by_refresh_token(&self, token: &str) -> Result<Option<uuid::Uuid>, DomainError>;
             async fn rotate_refresh_token(&self, old_token: &str, user_id: uuid::Uuid, role: &Role) -> Result<TokenPair, DomainError>;
             async fn revoke_refresh_token(&self, token: &str) -> Result<(), DomainError>;
         }
@@ -119,13 +120,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rejects_invalid_token() {
+    async fn rejects_unknown_refresh_token() {
         let repo = MockUserRepo::new();
         let mut token_svc = MockTokenSvc::new();
 
         token_svc
-            .expect_validate_access_token()
-            .returning(|_| Err(DomainError::InvalidCredentials));
+            .expect_find_user_id_by_refresh_token()
+            .returning(|_| Ok(None));
 
         let uc = RefreshTokenUseCase::new(Arc::new(repo), Arc::new(token_svc));
         assert_eq!(
@@ -141,13 +142,8 @@ mod tests {
         let user_id = Uuid::new_v4();
 
         token_svc
-            .expect_validate_access_token()
-            .returning(move |_| {
-                Ok(AccessTokenClaims {
-                    user_id,
-                    role: Role::User,
-                })
-            });
+            .expect_find_user_id_by_refresh_token()
+            .returning(move |_| Ok(Some(user_id)));
         repo.expect_find_by_id().returning(|_| Ok(None));
 
         let uc = RefreshTokenUseCase::new(Arc::new(repo), Arc::new(token_svc));
@@ -164,13 +160,8 @@ mod tests {
         let user_id = Uuid::new_v4();
 
         token_svc
-            .expect_validate_access_token()
-            .returning(move |_| {
-                Ok(AccessTokenClaims {
-                    user_id,
-                    role: Role::User,
-                })
-            });
+            .expect_find_user_id_by_refresh_token()
+            .returning(move |_| Ok(Some(user_id)));
         repo.expect_find_by_id()
             .returning(move |_| Ok(Some(make_user(user_id, false))));
         token_svc
@@ -191,13 +182,8 @@ mod tests {
         let user_id = Uuid::new_v4();
 
         token_svc
-            .expect_validate_access_token()
-            .returning(move |_| {
-                Ok(AccessTokenClaims {
-                    user_id,
-                    role: Role::User,
-                })
-            });
+            .expect_find_user_id_by_refresh_token()
+            .returning(move |_| Ok(Some(user_id)));
         repo.expect_find_by_id()
             .returning(move |_| Ok(Some(make_user(user_id, true))));
         token_svc

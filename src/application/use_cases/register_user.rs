@@ -109,6 +109,7 @@ mod tests {
         impl TokenService for TokenSvc {
             async fn generate_pair(&self, user_id: uuid::Uuid, role: &Role) -> Result<crate::application::ports::TokenPair, DomainError>;
             async fn validate_access_token(&self, token: &str) -> Result<crate::application::ports::AccessTokenClaims, DomainError>;
+            async fn find_user_id_by_refresh_token(&self, token: &str) -> Result<Option<uuid::Uuid>, DomainError>;
             async fn rotate_refresh_token(&self, old_token: &str, user_id: uuid::Uuid, role: &Role) -> Result<crate::application::ports::TokenPair, DomainError>;
             async fn revoke_refresh_token(&self, token: &str) -> Result<(), DomainError>;
         }

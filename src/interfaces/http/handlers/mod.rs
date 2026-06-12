@@ -12,7 +12,8 @@ pub fn error_response(err: DomainError) -> axum::response::Response {
     let (status, message) = match &err {
         DomainError::InvalidEmail
         | DomainError::InvalidPasswordLength
-        | DomainError::InvalidName => (StatusCode::UNPROCESSABLE_ENTITY, err.to_string()),
+        | DomainError::InvalidName
+        | DomainError::InvalidRole => (StatusCode::UNPROCESSABLE_ENTITY, err.to_string()),
         DomainError::EmailAlreadyExists => (StatusCode::CONFLICT, err.to_string()),
         DomainError::UserNotFound => (StatusCode::NOT_FOUND, err.to_string()),
         DomainError::InvalidCredentials => (StatusCode::UNAUTHORIZED, err.to_string()),

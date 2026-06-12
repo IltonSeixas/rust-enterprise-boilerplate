@@ -141,6 +141,7 @@ The `PasswordHasher` trait abstracts the algorithm — the domain never touches 
 | `PUT` | `/v1/users/me` | Update authenticated user profile |
 | `PUT` | `/v1/users/me/password` | Change authenticated user password |
 | `GET` | `/v1/users/:id` | Get a user by id |
+| `PUT` | `/v1/users/:id/role` | Change a user's role (Owner/Admin only) |
 | `GET` | `/health` | Liveness check |
 | `GET` | `/ready` | Readiness check |
 | `GET` | `/metrics` | Prometheus metrics |
@@ -152,7 +153,7 @@ Proto definitions live in `proto/boilerplate.proto` and are compiled by `tonic-p
 | Service | RPC | Mirrors |
 |---|---|---|
 | `AuthService` | `Register`, `Login`, `RefreshToken` | `/v1/auth/*` |
-| `UserService` | `GetMe`, `UpdateProfile`, `ChangePassword` | `/v1/users/*` |
+| `UserService` | `GetMe`, `UpdateProfile`, `ChangePassword`, `ChangeRole` | `/v1/users/*` |
 
 `UserService` RPCs require an `authorization: Bearer <access_token>` request metadata entry, validated the same way as the REST `require_auth` middleware (active-account check included).
 
