@@ -15,7 +15,6 @@ pub struct ChangePasswordRequest {
     pub new_password: String,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct ChangeRoleRequest {
     pub role: Role,

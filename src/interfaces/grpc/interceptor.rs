@@ -10,7 +10,6 @@ use crate::{
 
 pub struct AuthenticatedCaller {
     pub id: Uuid,
-    #[allow(dead_code)]
     pub role: Role,
 }
 
