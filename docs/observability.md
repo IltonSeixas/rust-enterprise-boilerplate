@@ -16,16 +16,18 @@ Every HTTP request and gRPC call is automatically instrumented as a span. Use ca
 
 ```rust
 // infrastructure/telemetry/tracing.rs
-let exporter = opentelemetry_otlp::new_exporter()
-    .tonic()
+let exporter = SpanExporter::builder()
+    .with_tonic()
     .with_endpoint(otlp_endpoint)
-    .build_span_exporter()?;
+    .build()?;
 
-let provider = trace::TracerProvider::builder()
-    .with_batch_exporter(exporter, runtime::Tokio)
-    .with_config(trace::config().with_resource(Resource::new(vec![
-        KeyValue::new(SERVICE_NAME, service_name.to_string()),
-    ])))
+let resource = Resource::builder()
+    .with_attribute(KeyValue::new(SERVICE_NAME, service_name.to_string()))
+    .build();
+
+let provider = SdkTracerProvider::builder()
+    .with_batch_exporter(exporter)
+    .with_resource(resource)
     .build();
 
 opentelemetry::global::set_tracer_provider(provider.clone());
