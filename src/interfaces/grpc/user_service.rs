@@ -5,13 +5,13 @@ use tonic::{Request, Response, Status};
 use crate::{
     application::{
         dtos::{
-            ChangePasswordRequest as ChangePasswordDto, UpdateProfileRequest as UpdateProfileDto,
-            UserResponse as UserResponseDto,
+            ChangePasswordRequest as ChangePasswordDto, ChangeRoleRequest as ChangeRoleDto,
+            UpdateProfileRequest as UpdateProfileDto, UserResponse as UserResponseDto,
         },
         ports::TokenService,
-        use_cases::{ChangePassword, GetUser, UpdateProfile},
+        use_cases::{ChangePassword, ChangeUserRole, GetUser, UpdateProfile},
     },
-    domain::repositories::UserRepository,
+    domain::{entities::Role, errors::DomainError, repositories::UserRepository},
 };
 
 use super::{
@@ -19,7 +19,7 @@ use super::{
     interceptor::authenticate,
     proto::{
         user_service_server::UserService, ChangePasswordRequest, ChangePasswordResponse,
-        GetMeRequest, UpdateProfileRequest, UserResponse,
+        ChangeRoleRequest, GetMeRequest, UpdateProfileRequest, UserResponse,
     },
 };
 
@@ -27,6 +27,7 @@ pub struct UserGrpcService {
     pub get_user: Arc<GetUser>,
     pub update_profile: Arc<UpdateProfile>,
     pub change_password: Arc<ChangePassword>,
+    pub change_role: Arc<ChangeUserRole>,
     pub token_svc: Arc<dyn TokenService>,
     pub user_repo: Arc<dyn UserRepository>,
 }
@@ -88,5 +89,34 @@ impl UserService for UserGrpcService {
             .await
             .map_err(to_status)?;
         Ok(Response::new(ChangePasswordResponse {}))
+    }
+
+    async fn change_role(
+        &self,
+        request: Request<ChangeRoleRequest>,
+    ) -> Result<Response<UserResponse>, Status> {
+        let caller = authenticate(&request, &self.token_svc, &self.user_repo).await?;
+
+        if !caller.role.can_manage_roles() {
+            return Err(to_status(DomainError::InsufficientPermissions));
+        }
+
+        let req = request.into_inner();
+        let target_id = req
+            .user_id
+            .parse()
+            .map_err(|_| Status::invalid_argument("invalid user id"))?;
+        let role: Role = req
+            .role
+            .parse()
+            .map_err(|_| Status::invalid_argument("invalid role"))?;
+        let dto = ChangeRoleDto { role };
+
+        let resp = self
+            .change_role
+            .execute(caller.id, target_id, dto)
+            .await
+            .map_err(to_status)?;
+        Ok(Response::new(to_proto_response(resp)))
     }
 }

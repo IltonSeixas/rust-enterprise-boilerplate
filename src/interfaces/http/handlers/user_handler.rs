@@ -10,8 +10,8 @@ use uuid::Uuid;
 
 use crate::{
     application::{
-        dtos::{ChangePasswordRequest, UpdateProfileRequest},
-        use_cases::{ChangePassword, GetUser, UpdateProfile},
+        dtos::{ChangePasswordRequest, ChangeRoleRequest, UpdateProfileRequest},
+        use_cases::{ChangePassword, ChangeUserRole, GetUser, UpdateProfile},
     },
     interfaces::http::middleware::AuthenticatedUser,
 };
@@ -21,6 +21,7 @@ pub struct UserState {
     pub get_user: Arc<GetUser>,
     pub update_profile: Arc<UpdateProfile>,
     pub change_password: Arc<ChangePassword>,
+    pub change_role: Arc<ChangeUserRole>,
 }
 
 pub async fn get_me(
@@ -69,6 +70,26 @@ pub async fn get_user(
     }
 
     match state.get_user.execute(id).await {
+        Ok(resp) => (StatusCode::OK, Json(resp)).into_response(),
+        Err(e) => super::error_response(e),
+    }
+}
+
+pub async fn change_role(
+    Extension(auth): Extension<AuthenticatedUser>,
+    State(state): State<UserState>,
+    Path(id): Path<Uuid>,
+    Json(req): Json<ChangeRoleRequest>,
+) -> impl IntoResponse {
+    if !auth.role.can_manage_roles() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({ "error": "insufficient permissions" })),
+        )
+            .into_response();
+    }
+
+    match state.change_role.execute(auth.id, id, req).await {
         Ok(resp) => (StatusCode::OK, Json(resp)).into_response(),
         Err(e) => super::error_response(e),
     }

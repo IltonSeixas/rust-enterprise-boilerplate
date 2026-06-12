@@ -92,6 +92,24 @@ impl TokenService for JwtTokenService {
         })
     }
 
+    async fn find_user_id_by_refresh_token(
+        &self,
+        token: &str,
+    ) -> Result<Option<Uuid>, DomainError> {
+        let mut conn = self.redis.clone();
+        let stored: Option<String> = conn
+            .get(Self::redis_key(token))
+            .await
+            .map_err(|e| DomainError::Repository(e.to_string()))?;
+
+        match stored {
+            Some(raw) => Uuid::parse_str(&raw)
+                .map(Some)
+                .map_err(|_| DomainError::InvalidCredentials),
+            None => Ok(None),
+        }
+    }
+
     async fn rotate_refresh_token(
         &self,
         old_token: &str,

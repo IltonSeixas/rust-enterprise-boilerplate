@@ -19,7 +19,6 @@ impl Role {
         matches!(self, Role::Owner | Role::Admin)
     }
 
-    #[allow(dead_code)]
     pub fn can_promote_to(&self, target: &Role) -> bool {
         matches!((self, target), (Role::Owner, _) | (Role::Admin, Role::User))
     }
@@ -31,6 +30,19 @@ impl std::fmt::Display for Role {
             Role::Owner => write!(f, "owner"),
             Role::Admin => write!(f, "admin"),
             Role::User => write!(f, "user"),
+        }
+    }
+}
+
+impl std::str::FromStr for Role {
+    type Err = DomainError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "owner" => Ok(Role::Owner),
+            "admin" => Ok(Role::Admin),
+            "user" => Ok(Role::User),
+            _ => Err(DomainError::InvalidRole),
         }
     }
 }
@@ -107,7 +119,6 @@ impl User {
         self.updated_at = Utc::now();
     }
 
-    #[allow(dead_code)]
     pub fn change_role(&mut self, new_role: Role, actor: &User) -> Result<(), DomainError> {
         if !actor.role.can_promote_to(&new_role) {
             return Err(DomainError::InsufficientPermissions);
