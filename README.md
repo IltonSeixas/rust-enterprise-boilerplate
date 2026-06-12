@@ -76,7 +76,7 @@ Nothing in `domain/` or `application/` imports from `infrastructure/` or `interf
 
 ### Prerequisites
 
-- Rust 1.90+ (`rustup update stable`)
+- Rust 1.96+ (`rustup update stable`)
 - Optional for production: PostgreSQL 15+, Redis 7+
 
 ### Run immediately (in-memory, zero config)
@@ -184,7 +184,7 @@ The in-memory adapter makes unit tests fast and deterministic — no test contai
 
 `infrastructure/telemetry` wires the three pillars on startup:
 
-- **Traces**: a global `TracerProvider` batches spans through an OTLP gRPC exporter (`opentelemetry-otlp` + `tracing-opentelemetry`), tagging them with the service name. `tracing::info!`/`#[tracing::instrument]` calls anywhere in the codebase become spans automatically.
+- **Traces**: a global `SdkTracerProvider` batches spans through an OTLP gRPC exporter (`opentelemetry-otlp` + `tracing-opentelemetry`), tagging them with the service name. `tracing::info!`/`#[tracing::instrument]` calls anywhere in the codebase become spans automatically.
 - **Metrics**: `metrics_exporter_prometheus` installs a global recorder; the handle is exposed at `GET /metrics` in the Prometheus exposition format.
 - **Logs**: structured JSON via `tracing-subscriber`, correlated with the active span through `with_current_span`/`with_span_list`.
 
