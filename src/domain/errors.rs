@@ -11,6 +11,9 @@ pub enum DomainError {
     #[error("name must be between 1 and 100 characters")]
     InvalidName,
 
+    #[error("invalid role")]
+    InvalidRole,
+
     #[error("user not found")]
     UserNotFound,
 
@@ -24,7 +27,6 @@ pub enum DomainError {
     AccountInactive,
 
     #[error("insufficient permissions")]
-    #[allow(dead_code)]
     InsufficientPermissions,
 
     #[error("repository error: {0}")]

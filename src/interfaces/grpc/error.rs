@@ -6,7 +6,8 @@ pub fn to_status(err: DomainError) -> Status {
     let code = match &err {
         DomainError::InvalidEmail
         | DomainError::InvalidPasswordLength
-        | DomainError::InvalidName => Code::InvalidArgument,
+        | DomainError::InvalidName
+        | DomainError::InvalidRole => Code::InvalidArgument,
         DomainError::EmailAlreadyExists => Code::AlreadyExists,
         DomainError::UserNotFound => Code::NotFound,
         DomainError::InvalidCredentials => Code::Unauthenticated,

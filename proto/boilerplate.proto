@@ -15,6 +15,7 @@ service UserService {
   rpc GetMe(GetMeRequest) returns (UserResponse);
   rpc UpdateProfile(UpdateProfileRequest) returns (UserResponse);
   rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse);
+  rpc ChangeRole(ChangeRoleRequest) returns (UserResponse);
 }
 
 message RegisterRequest {
@@ -57,6 +58,11 @@ message ChangePasswordRequest {
 }
 
 message ChangePasswordResponse {}
+
+message ChangeRoleRequest {
+  string user_id = 1;
+  string role = 2;
+}
 
 message UserResponse {
   string id = 1;
