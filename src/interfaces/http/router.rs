@@ -71,7 +71,5 @@ pub fn build_router(
         .layer(TraceLayer::new_for_http())
         .layer(middleware::from_fn(security_headers))
         .layer(build_cors_layer(&router_cfg.allowed_origins))
-        .layer(GovernorLayer {
-            config: governor_cfg.into(),
-        })
+        .layer(GovernorLayer::new(governor_cfg))
 }
