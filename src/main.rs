@@ -35,7 +35,7 @@ use interfaces::{
 async fn main() -> anyhow::Result<()> {
     let cfg = AppConfig::from_env().expect("failed to load configuration");
 
-    init_tracing("rust-enterprise-boilerplate", &cfg.otlp_endpoint)?;
+    let tracer_provider = init_tracing("rust-enterprise-boilerplate", &cfg.otlp_endpoint)?;
     let metrics_handle = init_prometheus();
 
     let redis_url = cfg
@@ -144,7 +144,9 @@ async fn main() -> anyhow::Result<()> {
         async { grpc_server.await.map_err(anyhow::Error::from) },
     );
 
-    opentelemetry::global::shutdown_tracer_provider();
+    tracer_provider
+        .shutdown()
+        .map_err(|e| anyhow::anyhow!("failed to shut down tracer provider: {e}"))?;
 
     result?;
 
