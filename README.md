@@ -147,7 +147,7 @@ The `PasswordHasher` trait abstracts the algorithm — the domain never touches 
 
 ### gRPC — `localhost:50051`
 
-Proto definitions live in `proto/boilerplate.proto` and are compiled by `tonic-build` from `build.rs` on every `cargo build` (the `protoc` binary is vendored via `protoc-bin-vendored`, so no system dependency is required).
+Proto definitions live in `proto/boilerplate.proto` and are compiled by `tonic-prost-build` from `build.rs` on every `cargo build` (the `protoc` binary is vendored via `protoc-bin-vendored`, so no system dependency is required).
 
 | Service | RPC | Mirrors |
 |---|---|---|
