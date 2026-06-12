@@ -18,14 +18,14 @@ postgres = ["sqlx/postgres", "sqlx/runtime-tokio-rustls"]
 tokio = { version = "1", features = ["full"] }
 
 # HTTP
-axum = { version = "0.7", features = ["macros"] }
-tower = { version = "0.4", features = ["full"] }
-tower-http = { version = "0.5", features = ["cors", "trace", "compression-gzip"] }
-tower_governor = { version = "0.4", features = ["axum"] }
+axum = { version = "0.8", features = ["macros"] }
+tower = { version = "0.5", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip"] }
+tower_governor = { version = "0.8", features = ["axum"] }
 
 # gRPC
-tonic = "0.11"
-prost = "0.12"
+tonic = "0.14"
+prost = "0.14"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -35,31 +35,31 @@ serde_json = "1"
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "macros", "migrate"], optional = true }
 
 # Redis
-redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
+redis = { version = "1.2", features = ["tokio-comp", "connection-manager"] }
 
 # Security
 argon2 = "0.5"
 jsonwebtoken = "10"
 uuid = { version = "1", features = ["v4", "serde"] }
-rand = "0.8"
+rand = "0.9"
 
 # Config
-config = "0.14"
+config = "0.15"
 dotenvy = "0.15"
 
 # Observability
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-tracing-opentelemetry = "0.22"
-opentelemetry = { version = "0.21", features = ["trace"] }
-opentelemetry_sdk = { version = "0.21", features = ["rt-tokio", "trace"] }
-opentelemetry-otlp = { version = "0.14", features = ["tonic", "trace"] }
-opentelemetry-semantic-conventions = "0.13"
-metrics = "0.22"
-metrics-exporter-prometheus = "0.13"
+tracing-opentelemetry = "0.33"
+opentelemetry = { version = "0.32", features = ["trace"] }
+opentelemetry_sdk = { version = "0.32", features = ["rt-tokio", "trace"] }
+opentelemetry-otlp = { version = "0.32", features = ["tonic", "trace"] }
+opentelemetry-semantic-conventions = "0.32"
+metrics = "0.24"
+metrics-exporter-prometheus = "0.18"
 
 # Error handling
-thiserror = "1"
+thiserror = "2"
 anyhow = "1"
 
 # Time
@@ -69,13 +69,13 @@ chrono = { version = "0.4", features = ["serde"] }
 async-trait = "0.1"
 
 [build-dependencies]
-tonic-build = "0.11"
+tonic-build = "0.14"
 protoc-bin-vendored = "3"
 
 [dev-dependencies]
-mockall = "0.12"
+mockall = "0.14"
 tokio = { version = "1", features = ["full", "test-util"] }
-axum-test = "14"
+axum-test = "20"
 serde_json = "1"
 
 [profile.release]
