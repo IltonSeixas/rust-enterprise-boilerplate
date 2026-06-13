@@ -18,10 +18,6 @@ impl Role {
     pub fn can_manage_roles(&self) -> bool {
         matches!(self, Role::Owner | Role::Admin)
     }
-
-    pub fn can_promote_to(&self, target: &Role) -> bool {
-        matches!((self, target), (Role::Owner, _) | (Role::Admin, Role::User))
-    }
 }
 
 impl std::fmt::Display for Role {
@@ -120,7 +116,7 @@ impl User {
     }
 
     pub fn change_role(&mut self, new_role: Role, actor: &User) -> Result<(), DomainError> {
-        if !actor.role.can_promote_to(&new_role) {
+        if actor.role != Role::Owner || actor.id == self.id {
             return Err(DomainError::InsufficientPermissions);
         }
         self.role = new_role;
@@ -221,10 +217,9 @@ mod tests {
     }
 
     #[test]
-    fn admin_can_promote_to_user_not_admin() {
+    fn admin_cannot_change_roles() {
         let mut target = make_user(Role::User);
         let actor = make_user(Role::Admin);
-        assert!(target.change_role(Role::User, &actor).is_ok());
         assert_eq!(
             target.change_role(Role::Admin, &actor).unwrap_err(),
             DomainError::InsufficientPermissions
@@ -232,11 +227,21 @@ mod tests {
     }
 
     #[test]
-    fn owner_can_promote_to_any_role() {
+    fn owner_can_change_another_users_role() {
         let mut target = make_user(Role::User);
         let actor = make_user(Role::Owner);
         assert!(target.change_role(Role::Admin, &actor).is_ok());
         assert!(target.change_role(Role::Owner, &actor).is_ok());
+    }
+
+    #[test]
+    fn owner_cannot_change_their_own_role() {
+        let mut owner = make_user(Role::Owner);
+        let actor = owner.clone();
+        assert_eq!(
+            owner.change_role(Role::Admin, &actor).unwrap_err(),
+            DomainError::InsufficientPermissions
+        );
     }
 
     #[test]

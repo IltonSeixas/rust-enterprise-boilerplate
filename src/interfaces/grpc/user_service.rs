@@ -97,7 +97,7 @@ impl UserService for UserGrpcService {
     ) -> Result<Response<UserResponse>, Status> {
         let caller = authenticate(&request, &self.token_svc, &self.user_repo).await?;
 
-        if !caller.role.can_manage_roles() {
+        if caller.role != Role::Owner {
             return Err(to_status(DomainError::InsufficientPermissions));
         }
 

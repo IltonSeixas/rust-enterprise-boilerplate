@@ -141,7 +141,7 @@ The `PasswordHasher` trait abstracts the algorithm — the domain never touches 
 | `PUT` | `/v1/users/me` | Update authenticated user profile |
 | `PUT` | `/v1/users/me/password` | Change authenticated user password |
 | `GET` | `/v1/users/:id` | Get a user by id |
-| `PUT` | `/v1/users/:id/role` | Change a user's role (Owner/Admin only) |
+| `PUT` | `/v1/users/:id/role` | Change a user's role (Owner only, cannot change own role) |
 | `GET` | `/health` | Liveness check |
 | `GET` | `/ready` | Readiness check |
 | `GET` | `/metrics` | Prometheus metrics |
