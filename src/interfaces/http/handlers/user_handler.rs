@@ -13,6 +13,7 @@ use crate::{
         dtos::{ChangePasswordRequest, ChangeRoleRequest, UpdateProfileRequest},
         use_cases::{ChangePassword, ChangeUserRole, GetUser, UpdateProfile},
     },
+    domain::entities::Role,
     interfaces::http::middleware::AuthenticatedUser,
 };
 
@@ -81,7 +82,7 @@ pub async fn change_role(
     Path(id): Path<Uuid>,
     Json(req): Json<ChangeRoleRequest>,
 ) -> impl IntoResponse {
-    if !auth.role.can_manage_roles() {
+    if auth.role != Role::Owner {
         return (
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({ "error": "insufficient permissions" })),

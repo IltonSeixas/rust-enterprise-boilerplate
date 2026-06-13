@@ -115,7 +115,7 @@ mod tests {
     #[tokio::test]
     async fn rejects_when_actor_lacks_permission() {
         let mut repo = MockUserRepo::new();
-        let actor = make_user(Role::User);
+        let actor = make_user(Role::Admin);
         let target = make_user(Role::User);
 
         repo.expect_find_by_id()
@@ -136,7 +136,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn admin_promotes_user_to_admin_and_persists() {
+    async fn rejects_when_actor_changes_their_own_role() {
+        let mut repo = MockUserRepo::new();
+        let owner = make_user(Role::Owner);
+        let owner_id = owner.id().value();
+        let owner_for_target = owner.clone();
+
+        repo.expect_find_by_id()
+            .times(1)
+            .returning(move |_| Ok(Some(owner.clone())));
+        repo.expect_find_by_id()
+            .times(1)
+            .returning(move |_| Ok(Some(owner_for_target.clone())));
+
+        let uc = ChangeUserRole::new(Arc::new(repo));
+        let req = ChangeRoleRequest { role: Role::Admin };
+        assert_eq!(
+            uc.execute(owner_id, owner_id, req).await.unwrap_err(),
+            DomainError::InsufficientPermissions
+        );
+    }
+
+    #[tokio::test]
+    async fn owner_promotes_user_to_admin_and_persists() {
         let mut repo = MockUserRepo::new();
         let actor = make_user(Role::Owner);
         let target = make_user(Role::User);
