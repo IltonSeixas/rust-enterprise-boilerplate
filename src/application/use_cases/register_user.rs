@@ -169,7 +169,7 @@ mod tests {
 
         hasher.expect_hash().returning(|_| {
             Ok(crate::domain::value_objects::PasswordHash::from_phc_string(
-                "$argon2id$v=19$m=65536,t=2,p=1$salt$hash".into(),
+                "$argon2id$v=19$m=65536,t=3,p=4$salt$hash".into(),
             ))
         });
 
@@ -202,7 +202,7 @@ mod tests {
 
         hasher.expect_hash().returning(|_| {
             Ok(crate::domain::value_objects::PasswordHash::from_phc_string(
-                "$argon2id$v=19$m=65536,t=2,p=1$salt$hash".into(),
+                "$argon2id$v=19$m=65536,t=3,p=4$salt$hash".into(),
             ))
         });
 

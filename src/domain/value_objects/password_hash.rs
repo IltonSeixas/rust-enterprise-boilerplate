@@ -27,7 +27,7 @@ mod tests {
 
     #[test]
     fn from_phc_string_stores_value() {
-        let phc = "$argon2id$v=19$m=65536,t=2,p=1$salt$hash".to_string();
+        let phc = "$argon2id$v=19$m=65536,t=3,p=4$salt$hash".to_string();
         let h = PasswordHash::from_phc_string(phc.clone());
         assert_eq!(h.value(), phc.as_str());
     }
