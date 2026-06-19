@@ -20,5 +20,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Thi
 - Docker multi-stage image and docker-compose stack
 - GitHub Actions CI (fmt, clippy, test, cargo-audit), Docker, and Release workflows
 - Architecture documentation, ADRs, security policy
+- Code coverage reporting in CI
+
+### Fixed
+- Privilege escalation in role-change use case
+- Refresh token rotation and role management edge cases
 
 [Unreleased]: https://github.com/IltonSeixas/rust-enterprise-boilerplate/compare/HEAD
