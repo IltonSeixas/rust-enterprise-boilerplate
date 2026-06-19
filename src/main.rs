@@ -59,12 +59,20 @@ async fn main() -> anyhow::Result<()> {
         Arc::new(InMemoryUserRepository::new()) as Arc<dyn domain::repositories::UserRepository>;
     let hasher: Arc<dyn application::ports::PasswordHasher> =
         Arc::new(Argon2Hasher::new()) as Arc<dyn application::ports::PasswordHasher>;
-    let token_svc: Arc<dyn application::ports::TokenService> = Arc::new(JwtTokenService::new(
-        &cfg.jwt_secret,
-        cfg.jwt_access_ttl_seconds,
-        cfg.jwt_refresh_ttl_seconds,
-        redis_conn,
-    ))
+    let jwt_private_key =
+        std::fs::read(&cfg.jwt_private_key_path).expect("failed to read JWT_PRIVATE_KEY_PATH");
+    let jwt_public_key =
+        std::fs::read(&cfg.jwt_public_key_path).expect("failed to read JWT_PUBLIC_KEY_PATH");
+    let token_svc: Arc<dyn application::ports::TokenService> = Arc::new(
+        JwtTokenService::new(
+            &jwt_private_key,
+            &jwt_public_key,
+            cfg.jwt_access_ttl_seconds,
+            cfg.jwt_refresh_ttl_seconds,
+            redis_conn,
+        )
+        .expect("failed to load Ed25519 JWT keys"),
+    )
         as Arc<dyn application::ports::TokenService>;
 
     let auth_state = AuthState {
