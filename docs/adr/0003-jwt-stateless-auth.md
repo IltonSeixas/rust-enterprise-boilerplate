@@ -12,7 +12,7 @@ Authentication requires a balance between statelessness (horizontal scalability)
 ## Decision
 
 A **hybrid model**:
-- **Access token**: stateless JWT HS256, TTL 15 minutes. Validated by signature and expiry only — no database lookup on every request.
+- **Access token**: stateless JWT (see [ADR-0005](0005-eddsa-jwt-signing.md) for the signing algorithm), TTL 15 minutes. Validated by signature and expiry only — no database lookup on every request.
 - **Refresh token**: opaque UUID, stored server-side in Redis with TTL 7 days. Rotated on every use. Returned in the JSON response body alongside the access token; the client decides how to persist and resend it.
 
 ## Consequences

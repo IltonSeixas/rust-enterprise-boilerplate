@@ -43,9 +43,17 @@ cargo run --features postgres # PostgreSQL adapter
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `JWT_SECRET` | Yes | — | HS256 signing key — minimum 32 characters, use a random value |
+| `JWT_PRIVATE_KEY_PATH` | Yes | — | Path to an Ed25519 PEM private key, used to sign access tokens (EdDSA) |
+| `JWT_PUBLIC_KEY_PATH` | Yes | — | Path to the matching Ed25519 PEM public key, used to verify access tokens |
 | `JWT_ACCESS_TTL_SECONDS` | No | `900` | Access token TTL in seconds (15 min) |
 | `JWT_REFRESH_TTL_SECONDS` | No | `604800` | Refresh token TTL in seconds (7 days) |
+
+Generate a key pair with:
+
+```bash
+openssl genpkey -algorithm ed25519 -out jwt_private.pem
+openssl pkey -in jwt_private.pem -pubout -out jwt_public.pem
+```
 
 ### Security
 
@@ -68,7 +76,7 @@ cargo run --features postgres # PostgreSQL adapter
 
 Before deploying to production:
 
-- [ ] `JWT_SECRET` is a random value of at least 32 characters — never reuse development values
+- [ ] `JWT_PRIVATE_KEY_PATH`/`JWT_PUBLIC_KEY_PATH` point to a production-only Ed25519 key pair — never reuse development keys
 - [ ] `DATABASE_URL` points to a production instance with TLS enabled (`sslmode=require`)
 - [ ] `REDIS_URL` uses a password-protected Redis instance
 - [ ] `ALLOWED_ORIGINS` lists only your actual frontend domains

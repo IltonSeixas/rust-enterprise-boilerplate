@@ -12,7 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Thi
 - Initial project structure: Clean Architecture + DDD layers
 - In-memory user repository adapter (zero-config default)
 - Argon2id password hashing via `argon2` crate
-- JWT HS256 access token + opaque refresh token with Redis rotation
+- JWT access token + opaque refresh token with Redis rotation
 - Axum HTTP server with security middleware (rate limiting, CORS, security headers)
 - tonic gRPC server with user service
 - OpenTelemetry tracing, Prometheus metrics, structured JSON logs
@@ -21,6 +21,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Thi
 - GitHub Actions CI (fmt, clippy, test, cargo-audit), Docker, and Release workflows
 - Architecture documentation, ADRs, security policy
 - Code coverage reporting in CI
+
+### Changed
+- **Breaking:** JWT access tokens are now signed with EdDSA (Ed25519) instead of HS256. `JWT_SECRET` is replaced by `JWT_PRIVATE_KEY_PATH`/`JWT_PUBLIC_KEY_PATH` — see [ADR-0005](docs/adr/0005-eddsa-jwt-signing.md). Tokens issued under the previous version are not valid under this one.
 
 ### Fixed
 - Privilege escalation in role-change use case

@@ -43,9 +43,10 @@ Timing-safe comparison is handled by the `argon2` crate internally. Never implem
 
 ## Authentication
 
-### Access Token (JWT HS256)
+### Access Token (JWT EdDSA)
 
-- Algorithm: HS256 (HMAC-SHA256)
+- Algorithm: EdDSA (Ed25519) — asymmetric signing via `jsonwebtoken`'s `rust_crypto` backend (`ed25519-dalek`)
+- Keys: `JWT_PRIVATE_KEY_PATH` signs, `JWT_PUBLIC_KEY_PATH` verifies — only the signing service needs the private key, any service holding the public key can verify tokens independently
 - TTL: 15 minutes (`JWT_ACCESS_TTL_SECONDS`)
 - Claims: `sub` (user ID), `iat`, `exp`
 - Transport: returned in the JSON response body (`access_token`); the client is responsible for storage and for sending it as `Authorization: Bearer <token>`
