@@ -8,7 +8,8 @@ pub struct AppConfig {
     pub port: u16,
     #[serde(default = "default_grpc_port")]
     pub grpc_port: u16,
-    pub jwt_secret: String,
+    pub jwt_private_key_path: String,
+    pub jwt_public_key_path: String,
     #[serde(default = "default_access_ttl")]
     pub jwt_access_ttl_seconds: i64,
     #[serde(default = "default_refresh_ttl")]
