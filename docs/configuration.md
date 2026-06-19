@@ -73,5 +73,5 @@ Before deploying to production:
 - [ ] `REDIS_URL` uses a password-protected Redis instance
 - [ ] `ALLOWED_ORIGINS` lists only your actual frontend domains
 - [ ] `RUST_LOG` is set to `info` or `warn` — never `debug` or `trace`
-- [ ] `OTEL_EXPORTER_OTLP_ENDPOINT` points to your observability backend
+- [ ] `OTLP_ENDPOINT` points to your observability backend
 - [ ] All secrets are injected via a secrets manager (HashiCorp Vault, AWS Secrets Manager, etc.) — never committed to source control
