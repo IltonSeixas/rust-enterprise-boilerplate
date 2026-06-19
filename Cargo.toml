@@ -20,7 +20,7 @@ tokio = { version = "1", features = ["full"] }
 # HTTP
 axum = { version = "0.8", features = ["macros"] }
 tower = { version = "0.5", features = ["full"] }
-tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip"] }
+tower-http = { version = "0.7", features = ["cors", "trace", "compression-gzip"] }
 tower_governor = { version = "0.8", features = ["axum"] }
 
 # gRPC
@@ -40,10 +40,10 @@ redis = { version = "1.2", features = ["tokio-comp", "connection-manager"] }
 
 # Security
 argon2 = { version = "0.5", features = ["std"] }
-password-hash = { version = "0.5", features = ["getrandom"] }
+password-hash = { version = "0.6", features = ["getrandom"] }
 jsonwebtoken = "10"
 uuid = { version = "1", features = ["v4", "serde"] }
-rand = "0.9"
+rand = "0.10"
 
 # Config
 config = "0.15"
