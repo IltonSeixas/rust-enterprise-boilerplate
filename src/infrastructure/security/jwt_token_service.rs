@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::Utc;
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -27,19 +27,22 @@ pub struct JwtTokenService {
 }
 
 impl JwtTokenService {
+    /// `private_key_pem` and `public_key_pem` must be PKCS#8 PEM-encoded Ed25519 keys,
+    /// e.g. generated via `openssl genpkey -algorithm ed25519`.
     pub fn new(
-        secret: &str,
+        private_key_pem: &[u8],
+        public_key_pem: &[u8],
         access_ttl_seconds: i64,
         refresh_ttl_seconds: i64,
         redis: redis::aio::ConnectionManager,
-    ) -> Self {
-        Self {
-            encoding_key: EncodingKey::from_secret(secret.as_bytes()),
-            decoding_key: DecodingKey::from_secret(secret.as_bytes()),
+    ) -> Result<Self, jsonwebtoken::errors::Error> {
+        Ok(Self {
+            encoding_key: EncodingKey::from_ed_pem(private_key_pem)?,
+            decoding_key: DecodingKey::from_ed_pem(public_key_pem)?,
             access_ttl_seconds,
             refresh_ttl_seconds,
             redis,
-        }
+        })
     }
 
     fn redis_key(token: &str) -> String {
@@ -58,7 +61,7 @@ impl TokenService for JwtTokenService {
             exp: now + self.access_ttl_seconds,
         };
 
-        let access_token = encode(&Header::default(), &claims, &self.encoding_key)
+        let access_token = encode(&Header::new(Algorithm::EdDSA), &claims, &self.encoding_key)
             .map_err(|e| DomainError::Repository(e.to_string()))?;
 
         let refresh_token = Uuid::new_v4().to_string();
@@ -80,8 +83,12 @@ impl TokenService for JwtTokenService {
     }
 
     async fn validate_access_token(&self, token: &str) -> Result<AccessTokenClaims, DomainError> {
-        let data = decode::<JwtClaims>(token, &self.decoding_key, &Validation::default())
-            .map_err(|_| DomainError::InvalidCredentials)?;
+        let data = decode::<JwtClaims>(
+            token,
+            &self.decoding_key,
+            &Validation::new(Algorithm::EdDSA),
+        )
+        .map_err(|_| DomainError::InvalidCredentials)?;
 
         let user_id =
             Uuid::parse_str(&data.claims.sub).map_err(|_| DomainError::InvalidCredentials)?;
@@ -143,5 +150,76 @@ impl TokenService for JwtTokenService {
             .await
             .map_err(|e| DomainError::Repository(e.to_string()))?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Test-only Ed25519 PKCS#8 key pair — never used outside this module.
+    const TEST_PRIVATE_KEY_PEM: &[u8] = b"-----BEGIN PRIVATE KEY-----
+MC4CAQAwBQYDK2VwBCIEIOEtLVAjn5fXoZr+T7i0ysYGX3wREHMxWkSk/fi1do79
+-----END PRIVATE KEY-----
+";
+    const TEST_PUBLIC_KEY_PEM: &[u8] = b"-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEA8L8xpqriQa22NRiU93msMlmGkJJJYp+k8Y9ITlFIJSk=
+-----END PUBLIC KEY-----
+";
+
+    #[test]
+    fn access_token_is_signed_and_verified_with_eddsa() {
+        let encoding_key = EncodingKey::from_ed_pem(TEST_PRIVATE_KEY_PEM).unwrap();
+        let decoding_key = DecodingKey::from_ed_pem(TEST_PUBLIC_KEY_PEM).unwrap();
+
+        let now = Utc::now().timestamp();
+        let claims = JwtClaims {
+            sub: Uuid::new_v4().to_string(),
+            role: Role::User,
+            iat: now,
+            exp: now + 900,
+        };
+
+        let token = encode(&Header::new(Algorithm::EdDSA), &claims, &encoding_key)
+            .expect("token should be signed with EdDSA");
+
+        let decoded =
+            decode::<JwtClaims>(&token, &decoding_key, &Validation::new(Algorithm::EdDSA))
+                .expect("token signed with the matching private key should verify");
+
+        assert_eq!(decoded.claims.sub, claims.sub);
+        assert_eq!(decoded.header.alg, Algorithm::EdDSA);
+    }
+
+    #[test]
+    fn access_token_signed_with_a_different_key_pair_is_rejected() {
+        let encoding_key = EncodingKey::from_ed_pem(TEST_PRIVATE_KEY_PEM).unwrap();
+
+        let other_public_key_pem = b"-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAYohTHzpULkk0AienlYBbqC2uo/qmBiT3T33RvH/0pTE=
+-----END PUBLIC KEY-----
+";
+        let mismatched_decoding_key = DecodingKey::from_ed_pem(other_public_key_pem).unwrap();
+
+        let now = Utc::now().timestamp();
+        let claims = JwtClaims {
+            sub: Uuid::new_v4().to_string(),
+            role: Role::User,
+            iat: now,
+            exp: now + 900,
+        };
+
+        let token = encode(&Header::new(Algorithm::EdDSA), &claims, &encoding_key).unwrap();
+
+        let result = decode::<JwtClaims>(
+            &token,
+            &mismatched_decoding_key,
+            &Validation::new(Algorithm::EdDSA),
+        );
+
+        assert!(
+            result.is_err(),
+            "token must not verify against an unrelated public key"
+        );
     }
 }

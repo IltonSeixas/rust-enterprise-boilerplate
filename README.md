@@ -79,11 +79,14 @@ Nothing in `domain/` or `application/` imports from `infrastructure/` or `interf
 - Rust 1.96+ (`rustup update stable`)
 - Optional for production: PostgreSQL 15+, Redis 7+
 
-### Run immediately (in-memory, zero config)
+### Run immediately (in-memory, zero database)
 
 ```bash
 git clone https://github.com/IltonSeixas/rust-enterprise-boilerplate
 cd rust-enterprise-boilerplate
+cp .env.example .env
+openssl genpkey -algorithm ed25519 -out jwt_private.pem
+openssl pkey -in jwt_private.pem -pubout -out jwt_public.pem
 cargo run
 ```
 
@@ -93,7 +96,7 @@ The server starts on `http://localhost:8080` using the in-memory adapter. No dat
 
 ```bash
 cp .env.example .env
-# Edit .env: set DATABASE_URL, JWT_SECRET, etc.
+# Edit .env: set DATABASE_URL, JWT_PRIVATE_KEY_PATH, JWT_PUBLIC_KEY_PATH, etc.
 
 cargo run --features postgres
 ```
@@ -115,7 +118,7 @@ The `PasswordHasher` trait abstracts the algorithm — the domain never touches 
 
 ### Authentication Flow
 
-- **Access token**: JWT HS256, TTL 15 min, stateless
+- **Access token**: JWT EdDSA (Ed25519), TTL 15 min, stateless
 - **Refresh token**: opaque UUID, stored server-side (Redis), TTL 7 days, rotated on every use
 - **Revocation**: delete the Redis entry to immediately invalidate any session
 
@@ -208,7 +211,8 @@ All configuration via environment variables (12-Factor). See `.env.example` for 
 | `GRPC_PORT` | `50051` | gRPC port |
 | `DATABASE_URL` | — | PostgreSQL connection string (only read when built with `--features postgres`) |
 | `REDIS_URL` | `redis://127.0.0.1:6379` | Redis connection string (refresh token storage) |
-| `JWT_SECRET` | — | HS256 signing key (min 32 chars) |
+| `JWT_PRIVATE_KEY_PATH` | — | Path to the Ed25519 PEM private key used to sign access tokens |
+| `JWT_PUBLIC_KEY_PATH` | — | Path to the Ed25519 PEM public key used to verify access tokens |
 | `JWT_ACCESS_TTL_SECONDS` | `900` | Access token TTL, in seconds |
 | `JWT_REFRESH_TTL_SECONDS` | `604800` | Refresh token TTL, in seconds |
 | `ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated CORS allow-list |
@@ -225,12 +229,18 @@ All configuration via environment variables (12-Factor). See `.env.example` for 
 # Build optimized multi-stage image (~20 MB final layer)
 docker build -t rust-enterprise-boilerplate .
 
-# Run
-docker run -p 8080:8080 -p 50051:50051 --env-file .env rust-enterprise-boilerplate
+# Run (mount the key pair referenced by JWT_PRIVATE_KEY_PATH/JWT_PUBLIC_KEY_PATH in .env)
+docker run -p 8080:8080 -p 50051:50051 --env-file .env \
+  -v "$(pwd)/jwt_private.pem:/app/jwt_private.pem:ro" \
+  -v "$(pwd)/jwt_public.pem:/app/jwt_public.pem:ro" \
+  rust-enterprise-boilerplate
 ```
 
 ```bash
 # Full stack: app + redis + jaeger + prometheus + grafana
+# Requires jwt_private.pem/jwt_public.pem in the repo root — see Configuration above
+openssl genpkey -algorithm ed25519 -out jwt_private.pem
+openssl pkey -in jwt_private.pem -pubout -out jwt_public.pem
 docker compose up
 ```
 
