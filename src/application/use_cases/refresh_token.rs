@@ -82,6 +82,7 @@ mod tests {
             async fn delete(&self, id: uuid::Uuid) -> Result<(), DomainError>;
             async fn count(&self) -> Result<u64, DomainError>;
             async fn save_first_owner(&self, user: &crate::domain::entities::User) -> Result<bool, DomainError>;
+            async fn find_paginated(&self, offset: u64, limit: u64) -> Result<(Vec<crate::domain::entities::User>, u64), DomainError>;
         }
     }
 

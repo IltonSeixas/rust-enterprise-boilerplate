@@ -10,8 +10,8 @@ mod infrastructure;
 mod interfaces;
 
 use application::use_cases::{
-    ChangePassword, ChangeUserRole, GetUser, LoginUser, RefreshTokenUseCase, RegisterUser,
-    UpdateProfile,
+    ChangePassword, ChangeUserRole, GetUser, ListUsers, LoginUser, RefreshTokenUseCase,
+    RegisterUser, UpdateProfile,
 };
 use config::AppConfig;
 #[cfg(not(feature = "postgres"))]
@@ -94,6 +94,7 @@ async fn main() -> anyhow::Result<()> {
 
     let user_state = UserState {
         get_user: Arc::new(GetUser::new(Arc::clone(&user_repo))),
+        list_users: Arc::new(ListUsers::new(Arc::clone(&user_repo))),
         update_profile: Arc::new(UpdateProfile::new(Arc::clone(&user_repo))),
         change_password: Arc::new(ChangePassword::new(
             Arc::clone(&user_repo),
@@ -114,6 +115,7 @@ async fn main() -> anyhow::Result<()> {
     };
     let user_grpc = UserGrpcService {
         get_user: Arc::clone(&user_state.get_user),
+        list_users: Arc::clone(&user_state.list_users),
         update_profile: Arc::clone(&user_state.update_profile),
         change_password: Arc::clone(&user_state.change_password),
         change_role: Arc::clone(&user_state.change_role),
