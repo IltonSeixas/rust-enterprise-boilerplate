@@ -43,6 +43,7 @@ All of the above run automatically in CI on every pull request. A PR will not be
 ### Architecture
 
 - Never import infrastructure packages from `domain/` or `application/`
+- This rule is enforced automatically by `tests/architecture_test.rs` — see [ADR-0006](adr/0006-architecture-layering-test.md). A PR that violates it fails `cargo test`
 - Every new use case must have a corresponding test file
 - Every new value object must validate its invariants in the constructor and have tests for both valid and invalid inputs
 
