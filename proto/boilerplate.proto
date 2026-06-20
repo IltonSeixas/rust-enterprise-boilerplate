@@ -13,6 +13,7 @@ service AuthService {
 // Every RPC requires an `authorization: Bearer <access_token>` request metadata entry.
 service UserService {
   rpc GetMe(GetMeRequest) returns (UserResponse);
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
   rpc UpdateProfile(UpdateProfileRequest) returns (UserResponse);
   rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse);
   rpc ChangeRole(ChangeRoleRequest) returns (UserResponse);
@@ -47,6 +48,23 @@ message UserSummary {
 }
 
 message GetMeRequest {}
+
+message ListUsersRequest {
+  uint32 page = 1;
+  uint32 page_size = 2;
+}
+
+message PaginationMetadata {
+  uint32 page = 1;
+  uint32 page_size = 2;
+  uint64 total_items = 3;
+  uint32 total_pages = 4;
+}
+
+message ListUsersResponse {
+  repeated UserResponse items = 1;
+  PaginationMetadata pagination = 2;
+}
 
 message UpdateProfileRequest {
   string name = 1;

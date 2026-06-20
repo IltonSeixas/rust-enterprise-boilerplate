@@ -16,7 +16,9 @@ use crate::interfaces::http::{
         auth_handler::{login, refresh, register, AuthState},
         health_handler::{health, ready},
         metrics_handler::metrics,
-        user_handler::{change_password, change_role, get_me, get_user, update_me, UserState},
+        user_handler::{
+            change_password, change_role, get_me, get_user, list_users, update_me, UserState,
+        },
     },
     middleware::{build_cors_layer, require_auth, security_headers, AuthMiddlewareState},
 };
@@ -60,6 +62,7 @@ pub fn build_router(
             Router::new()
                 .route("/me", get(get_me).put(update_me))
                 .route("/me/password", put(change_password))
+                .route("/", get(list_users))
                 .route("/:id", get(get_user))
                 .route("/:id/role", put(change_role))
                 .with_state(user_state),

@@ -16,4 +16,12 @@ pub trait UserRepository: Send + Sync {
     /// Atomically saves `user` only if no Owner exists yet.
     /// Returns `Ok(true)` on success, `Ok(false)` if an Owner already existed.
     async fn save_first_owner(&self, user: &User) -> Result<bool, DomainError>;
+
+    /// Returns a page of users ordered by `created_at, id` together with the
+    /// total number of users matching no filter (i.e. the full collection size).
+    async fn find_paginated(
+        &self,
+        offset: u64,
+        limit: u64,
+    ) -> Result<(Vec<User>, u64), DomainError>;
 }
