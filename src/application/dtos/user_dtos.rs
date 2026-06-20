@@ -30,3 +30,23 @@ pub struct UserResponse {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct ListUsersQuery {
+    pub page: Option<u32>,
+    pub page_size: Option<u32>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PaginationMeta {
+    pub page: u32,
+    pub page_size: u32,
+    pub total_items: u64,
+    pub total_pages: u32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ListUsersResponse {
+    pub items: Vec<UserResponse>,
+    pub pagination: PaginationMeta,
+}

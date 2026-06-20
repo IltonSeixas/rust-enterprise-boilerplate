@@ -167,4 +167,33 @@ impl UserRepository for PostgresUserRepository {
             Err(e) => Err(DomainError::Repository(e.to_string())),
         }
     }
+
+    async fn find_paginated(
+        &self,
+        offset: u64,
+        limit: u64,
+    ) -> Result<(Vec<User>, u64), DomainError> {
+        let rows = sqlx::query_as!(
+            UserRow,
+            r#"SELECT id, email, password_hash, name, role, is_active, created_at, updated_at
+               FROM users ORDER BY created_at, id OFFSET $1 LIMIT $2"#,
+            offset as i64,
+            limit as i64
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Repository(e.to_string()))?;
+
+        let total_row = sqlx::query!("SELECT COUNT(*) as count FROM users")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| DomainError::Repository(e.to_string()))?;
+
+        let users = rows
+            .into_iter()
+            .map(User::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok((users, total_row.count.unwrap_or(0) as u64))
+    }
 }
