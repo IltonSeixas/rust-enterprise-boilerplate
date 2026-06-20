@@ -13,10 +13,12 @@ A backend boilerplate needs to remain useful as requirements evolve. The most co
 
 The project adopts **Clean Architecture** (Robert C. Martin) in its Hexagonal / Ports & Adapters form (Alistair Cockburn). The codebase is organized into four layers with a strict inward-only dependency rule:
 
-1. **Domain** — entities, value objects, repository traits. Zero external crate imports.
-2. **Application** — use cases, input/output port traits. Imports domain only.
+1. **Domain** — entities, value objects, repository traits. No infrastructure or framework crates (no `tokio`, `axum`, `tonic`, `sqlx`, `redis`, `jsonwebtoken`, `argon2`); plain data/utility crates such as `serde`, `uuid`, and `chrono` are fine.
+2. **Application** — use cases, input/output port traits. Imports domain only, plus the same data/utility crates — never the infrastructure crates listed above.
 3. **Infrastructure** — adapters (PostgreSQL, Redis, Argon2). Implements application ports.
 4. **Interfaces** — HTTP handlers, gRPC services. Calls application use cases.
+
+This dependency rule is enforced automatically by `tests/architecture_test.rs`, which scans `use` statements in `src/domain/` and `src/application/` — see [ADR-0006](0006-architecture-layering-test.md).
 
 ## Consequences
 
@@ -24,6 +26,7 @@ The project adopts **Clean Architecture** (Robert C. Martin) in its Hexagonal / 
 - Domain and application layers are testable without any infrastructure — unit tests run in milliseconds using mock adapters.
 - Swapping infrastructure (e.g., replacing SQLx with SeaORM) requires touching only the adapter, not the use cases.
 - The architecture is self-documenting: the module structure maps directly to the conceptual layers.
+- The dependency rule is a compiled, automatically-enforced test rather than a convention that erodes silently over time.
 
 **Negative:**
 - More initial boilerplate than a flat structure — requires discipline to maintain boundaries.
