@@ -2,7 +2,7 @@
 
 ## Philosophy
 
-Tests are written before implementation (TDD) and live alongside the code they test in `#[cfg(test)]` modules — there is no separate integration-test crate or tier. The in-memory adapter exists precisely to make the entire business logic testable without Docker, a database, or any network call.
+Tests are written before implementation (TDD) and live alongside the code they test in `#[cfg(test)]` modules — there is no integration-test tier exercising real infrastructure. The in-memory adapter exists precisely to make the entire business logic testable without Docker, a database, or any network call. The one exception is `tests/architecture_test.rs`, a `cargo test` integration test that scans the source tree itself rather than exercising business logic — see Architecture Tests below.
 
 ---
 
@@ -45,6 +45,9 @@ src/
         └── middleware/
             ├── cors.rs           # tower::ServiceExt::oneshot against a minimal router
             └── security_headers.rs
+
+tests/
+└── architecture_test.rs  # scans src/ for Clean Architecture dependency violations
 ```
 
 ---
@@ -151,6 +154,16 @@ async fn injects_expected_security_headers() {
     assert_eq!(headers["x-frame-options"], "DENY");
 }
 ```
+
+---
+
+## Architecture Tests
+
+`tests/architecture_test.rs` enforces the dependency rule from [ADR-0001](adr/0001-clean-architecture.md) as a real, automatically-run test rather than a convention checked only in review — see [ADR-0006](adr/0006-architecture-layering-test.md). It runs as part of the default `cargo test` step and fails the build if:
+
+- `domain/` or `application/` imports an infrastructure crate (`tokio`, `axum`, `tower*`, `tonic*`, `sqlx`, `redis`, `argon2`, `jsonwebtoken`, `opentelemetry*`, etc.)
+- `domain/` depends on `application/`, `infrastructure/`, or `interfaces/`
+- `application/` depends on `infrastructure/` or `interfaces/`
 
 ---
 
