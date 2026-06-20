@@ -48,7 +48,7 @@ interfaces → application → domain
 infrastructure → application → domain
 ```
 
-Nothing in `domain/` or `application/` imports from `infrastructure/` or `interfaces/`. Ever.
+Nothing in `domain/` or `application/` imports from `infrastructure/` or `interfaces/`. Ever. Enforced automatically by `tests/architecture_test.rs` (see [ADR-0006](docs/adr/0006-architecture-layering-test.md)) as part of the regular `cargo test` run.
 
 ---
 
@@ -171,6 +171,7 @@ cargo test
 ### Structure
 
 - **Unit tests**: co-located with source (`#[cfg(test)]` modules). Domain and use cases are tested in full isolation using `mockall`-generated mocks for repository, hasher and token-service ports; HTTP middleware (CORS, security headers) is exercised through `tower::ServiceExt::oneshot` against a minimal router.
+- **Architecture tests**: `tests/architecture_test.rs` enforces the Clean Architecture dependency rule from [ADR-0001](docs/adr/0001-clean-architecture.md) at test time — see [ADR-0006](docs/adr/0006-architecture-layering-test.md). Runs as part of the regular `cargo test` step.
 
 ### TDD Approach
 

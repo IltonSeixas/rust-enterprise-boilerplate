@@ -21,6 +21,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Thi
 - GitHub Actions CI (fmt, clippy, test, cargo-audit), Docker, and Release workflows
 - Architecture documentation, ADRs, security policy
 - Code coverage reporting in CI
+- `tests/architecture_test.rs` enforcing the Clean Architecture dependency rule from ADR-0001 at test time — see [ADR-0006](docs/adr/0006-architecture-layering-test.md)
 
 ### Changed
 - **Breaking:** JWT access tokens are now signed with EdDSA (Ed25519) instead of HS256. `JWT_SECRET` is replaced by `JWT_PRIVATE_KEY_PATH`/`JWT_PUBLIC_KEY_PATH` — see [ADR-0005](docs/adr/0005-eddsa-jwt-signing.md). Tokens issued under the previous version are not valid under this one.
