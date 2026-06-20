@@ -3,21 +3,31 @@ use std::sync::Arc;
 use crate::{
     application::{
         dtos::{AuthResponse, RefreshTokenRequest, UserSummary},
-        ports::TokenService,
+        ports::{AuditPort, TokenService},
     },
-    domain::{errors::DomainError, repositories::UserRepository},
+    domain::{
+        audit::{AuditEvent, AuditEventType},
+        errors::DomainError,
+        repositories::UserRepository,
+    },
 };
 
 pub struct RefreshTokenUseCase {
     user_repo: Arc<dyn UserRepository>,
     token_svc: Arc<dyn TokenService>,
+    audit: Arc<dyn AuditPort>,
 }
 
 impl RefreshTokenUseCase {
-    pub fn new(user_repo: Arc<dyn UserRepository>, token_svc: Arc<dyn TokenService>) -> Self {
+    pub fn new(
+        user_repo: Arc<dyn UserRepository>,
+        token_svc: Arc<dyn TokenService>,
+        audit: Arc<dyn AuditPort>,
+    ) -> Self {
         Self {
             user_repo,
             token_svc,
+            audit,
         }
     }
 
@@ -45,6 +55,15 @@ impl RefreshTokenUseCase {
             .token_svc
             .rotate_refresh_token(&req.refresh_token, user_id, user.role())
             .await?;
+
+        self.audit
+            .record(AuditEvent::new(
+                AuditEventType::TokenRefreshed,
+                Some(user_id),
+                Some(user_id),
+                String::new(),
+            ))
+            .await;
 
         Ok(AuthResponse {
             access_token: tokens.access_token,
@@ -98,6 +117,20 @@ mod tests {
         }
     }
 
+    mock! {
+        pub Audit {}
+        #[async_trait::async_trait]
+        impl AuditPort for Audit {
+            async fn record(&self, event: AuditEvent);
+        }
+    }
+
+    fn noop_audit() -> MockAudit {
+        let mut audit = MockAudit::new();
+        audit.expect_record().returning(|_| ());
+        audit
+    }
+
     fn make_user(id: Uuid, active: bool) -> crate::domain::entities::User {
         let email = Email::new("user@example.com").unwrap();
         let hash = PasswordHash::from_phc_string("$argon2id$v=19$...".into());
@@ -129,7 +162,11 @@ mod tests {
             .expect_find_user_id_by_refresh_token()
             .returning(|_| Ok(None));
 
-        let uc = RefreshTokenUseCase::new(Arc::new(repo), Arc::new(token_svc));
+        let uc = RefreshTokenUseCase::new(
+            Arc::new(repo),
+            Arc::new(token_svc),
+            Arc::new(MockAudit::new()),
+        );
         assert_eq!(
             uc.execute(request()).await.unwrap_err(),
             DomainError::InvalidCredentials
@@ -147,7 +184,11 @@ mod tests {
             .returning(move |_| Ok(Some(user_id)));
         repo.expect_find_by_id().returning(|_| Ok(None));
 
-        let uc = RefreshTokenUseCase::new(Arc::new(repo), Arc::new(token_svc));
+        let uc = RefreshTokenUseCase::new(
+            Arc::new(repo),
+            Arc::new(token_svc),
+            Arc::new(MockAudit::new()),
+        );
         assert_eq!(
             uc.execute(request()).await.unwrap_err(),
             DomainError::UserNotFound
@@ -169,7 +210,11 @@ mod tests {
             .expect_revoke_refresh_token()
             .returning(|_| Ok(()));
 
-        let uc = RefreshTokenUseCase::new(Arc::new(repo), Arc::new(token_svc));
+        let uc = RefreshTokenUseCase::new(
+            Arc::new(repo),
+            Arc::new(token_svc),
+            Arc::new(MockAudit::new()),
+        );
         assert_eq!(
             uc.execute(request()).await.unwrap_err(),
             DomainError::AccountInactive
@@ -181,6 +226,7 @@ mod tests {
         let mut repo = MockUserRepo::new();
         let mut token_svc = MockTokenSvc::new();
         let user_id = Uuid::new_v4();
+        let audit = noop_audit();
 
         token_svc
             .expect_find_user_id_by_refresh_token()
@@ -196,7 +242,7 @@ mod tests {
                 })
             });
 
-        let uc = RefreshTokenUseCase::new(Arc::new(repo), Arc::new(token_svc));
+        let uc = RefreshTokenUseCase::new(Arc::new(repo), Arc::new(token_svc), Arc::new(audit));
         let result = uc.execute(request()).await.unwrap();
         assert_eq!(result.access_token, "new-access");
         assert_eq!(result.refresh_token, "new-refresh");

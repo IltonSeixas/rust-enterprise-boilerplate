@@ -3,18 +3,34 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::{
-    application::{dtos::ChangePasswordRequest, ports::PasswordHasher},
-    domain::{errors::DomainError, repositories::UserRepository},
+    application::{
+        dtos::ChangePasswordRequest,
+        ports::{AuditPort, PasswordHasher},
+    },
+    domain::{
+        audit::{AuditEvent, AuditEventType},
+        errors::DomainError,
+        repositories::UserRepository,
+    },
 };
 
 pub struct ChangePassword {
     user_repo: Arc<dyn UserRepository>,
     hasher: Arc<dyn PasswordHasher>,
+    audit: Arc<dyn AuditPort>,
 }
 
 impl ChangePassword {
-    pub fn new(user_repo: Arc<dyn UserRepository>, hasher: Arc<dyn PasswordHasher>) -> Self {
-        Self { user_repo, hasher }
+    pub fn new(
+        user_repo: Arc<dyn UserRepository>,
+        hasher: Arc<dyn PasswordHasher>,
+        audit: Arc<dyn AuditPort>,
+    ) -> Self {
+        Self {
+            user_repo,
+            hasher,
+            audit,
+        }
     }
 
     pub async fn execute(&self, id: Uuid, req: ChangePasswordRequest) -> Result<(), DomainError> {
@@ -39,6 +55,15 @@ impl ChangePassword {
         let new_hash = self.hasher.hash(&req.new_password).await?;
         user.update_password(new_hash);
         self.user_repo.save(&user).await?;
+
+        self.audit
+            .record(AuditEvent::new(
+                AuditEventType::PasswordChanged,
+                Some(id),
+                Some(id),
+                String::new(),
+            ))
+            .await;
 
         Ok(())
     }
@@ -76,6 +101,20 @@ mod tests {
         }
     }
 
+    mock! {
+        pub Audit {}
+        #[async_trait::async_trait]
+        impl AuditPort for Audit {
+            async fn record(&self, event: AuditEvent);
+        }
+    }
+
+    fn noop_audit() -> MockAudit {
+        let mut audit = MockAudit::new();
+        audit.expect_record().returning(|_| ());
+        audit
+    }
+
     fn make_user() -> User {
         let email = Email::new("user@example.com").unwrap();
         let hash = PasswordHash::from_phc_string("$argon2id$v=19$old".into());
@@ -93,8 +132,9 @@ mod tests {
     async fn rejects_short_new_password() {
         let repo = MockUserRepo::new();
         let hasher = MockHasher::new();
+        let audit = MockAudit::new();
 
-        let uc = ChangePassword::new(Arc::new(repo), Arc::new(hasher));
+        let uc = ChangePassword::new(Arc::new(repo), Arc::new(hasher), Arc::new(audit));
         let result = uc
             .execute(Uuid::new_v4(), request("currentpassword1", "short"))
             .await;
@@ -105,9 +145,10 @@ mod tests {
     async fn rejects_when_user_not_found() {
         let mut repo = MockUserRepo::new();
         let hasher = MockHasher::new();
+        let audit = MockAudit::new();
         repo.expect_find_by_id().returning(|_| Ok(None));
 
-        let uc = ChangePassword::new(Arc::new(repo), Arc::new(hasher));
+        let uc = ChangePassword::new(Arc::new(repo), Arc::new(hasher), Arc::new(audit));
         let result = uc
             .execute(
                 Uuid::new_v4(),
@@ -121,12 +162,13 @@ mod tests {
     async fn rejects_wrong_current_password() {
         let mut repo = MockUserRepo::new();
         let mut hasher = MockHasher::new();
+        let audit = MockAudit::new();
         let user = make_user();
         repo.expect_find_by_id()
             .returning(move |_| Ok(Some(user.clone())));
         hasher.expect_verify().returning(|_, _| Ok(false));
 
-        let uc = ChangePassword::new(Arc::new(repo), Arc::new(hasher));
+        let uc = ChangePassword::new(Arc::new(repo), Arc::new(hasher), Arc::new(audit));
         let result = uc
             .execute(Uuid::new_v4(), request("wrongpassword1", "newpassword1234"))
             .await;
@@ -137,6 +179,7 @@ mod tests {
     async fn updates_password_hash_on_success() {
         let mut repo = MockUserRepo::new();
         let mut hasher = MockHasher::new();
+        let audit = noop_audit();
         let user = make_user();
         repo.expect_find_by_id()
             .returning(move |_| Ok(Some(user.clone())));
@@ -148,7 +191,7 @@ mod tests {
             .withf(|u| u.password_hash().value() == "$argon2id$v=19$new")
             .returning(|_| Ok(()));
 
-        let uc = ChangePassword::new(Arc::new(repo), Arc::new(hasher));
+        let uc = ChangePassword::new(Arc::new(repo), Arc::new(hasher), Arc::new(audit));
         let result = uc
             .execute(
                 Uuid::new_v4(),
