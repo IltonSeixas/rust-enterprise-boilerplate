@@ -3,15 +3,21 @@ use std::sync::Arc;
 use crate::{
     application::{
         dtos::{AuthResponse, LoginRequest, UserSummary},
-        ports::{PasswordHasher, TokenService},
+        ports::{AuditPort, PasswordHasher, TokenService},
     },
-    domain::{errors::DomainError, repositories::UserRepository, value_objects::Email},
+    domain::{
+        audit::{AuditEvent, AuditEventType},
+        errors::DomainError,
+        repositories::UserRepository,
+        value_objects::Email,
+    },
 };
 
 pub struct LoginUser {
     user_repo: Arc<dyn UserRepository>,
     hasher: Arc<dyn PasswordHasher>,
     token_svc: Arc<dyn TokenService>,
+    audit: Arc<dyn AuditPort>,
 }
 
 impl LoginUser {
@@ -19,24 +25,43 @@ impl LoginUser {
         user_repo: Arc<dyn UserRepository>,
         hasher: Arc<dyn PasswordHasher>,
         token_svc: Arc<dyn TokenService>,
+        audit: Arc<dyn AuditPort>,
     ) -> Self {
         Self {
             user_repo,
             hasher,
             token_svc,
+            audit,
         }
     }
 
     pub async fn execute(&self, req: LoginRequest) -> Result<AuthResponse, DomainError> {
         let email = Email::new(&req.email)?;
 
-        let user = self
-            .user_repo
-            .find_by_email(&email)
-            .await?
-            .ok_or(DomainError::InvalidCredentials)?;
+        let user = match self.user_repo.find_by_email(&email).await? {
+            Some(u) => u,
+            None => {
+                self.audit
+                    .record(AuditEvent::new(
+                        AuditEventType::LoginFailed,
+                        None,
+                        None,
+                        format!("email={}", email.value()),
+                    ))
+                    .await;
+                return Err(DomainError::InvalidCredentials);
+            }
+        };
 
         if !user.is_active() {
+            self.audit
+                .record(AuditEvent::new(
+                    AuditEventType::LoginFailed,
+                    Some(user.id().value()),
+                    Some(user.id().value()),
+                    "reason=account_inactive".to_string(),
+                ))
+                .await;
             return Err(DomainError::AccountInactive);
         }
 
@@ -45,6 +70,14 @@ impl LoginUser {
             .verify(&req.password, user.password_hash())
             .await?;
         if !valid {
+            self.audit
+                .record(AuditEvent::new(
+                    AuditEventType::LoginFailed,
+                    Some(user.id().value()),
+                    Some(user.id().value()),
+                    "reason=invalid_password".to_string(),
+                ))
+                .await;
             return Err(DomainError::InvalidCredentials);
         }
 
@@ -52,6 +85,15 @@ impl LoginUser {
             .token_svc
             .generate_pair(user.id().value(), user.role())
             .await?;
+
+        self.audit
+            .record(AuditEvent::new(
+                AuditEventType::LoginSucceeded,
+                Some(user.id().value()),
+                Some(user.id().value()),
+                String::new(),
+            ))
+            .await;
 
         Ok(AuthResponse {
             access_token: tokens.access_token,
@@ -110,6 +152,20 @@ mod tests {
         }
     }
 
+    mock! {
+        pub Audit {}
+        #[async_trait::async_trait]
+        impl AuditPort for Audit {
+            async fn record(&self, event: AuditEvent);
+        }
+    }
+
+    fn noop_audit() -> MockAudit {
+        let mut audit = MockAudit::new();
+        audit.expect_record().returning(|_| ());
+        audit
+    }
+
     fn make_user(role: Role, active: bool) -> User {
         let email = Email::new("user@example.com").unwrap();
         let hash = PasswordHash::from_phc_string("$argon2id$v=19$...".into());
@@ -132,10 +188,16 @@ mod tests {
         let mut repo = MockUserRepo::new();
         let hasher = MockHasher::new();
         let token_svc = MockTokenSvc::new();
+        let audit = noop_audit();
 
         repo.expect_find_by_email().returning(|_| Ok(None));
 
-        let uc = LoginUser::new(Arc::new(repo), Arc::new(hasher), Arc::new(token_svc));
+        let uc = LoginUser::new(
+            Arc::new(repo),
+            Arc::new(hasher),
+            Arc::new(token_svc),
+            Arc::new(audit),
+        );
         assert_eq!(
             uc.execute(login_request()).await.unwrap_err(),
             DomainError::InvalidCredentials
@@ -147,11 +209,17 @@ mod tests {
         let mut repo = MockUserRepo::new();
         let hasher = MockHasher::new();
         let token_svc = MockTokenSvc::new();
+        let audit = noop_audit();
 
         repo.expect_find_by_email()
             .returning(|_| Ok(Some(make_user(Role::User, false))));
 
-        let uc = LoginUser::new(Arc::new(repo), Arc::new(hasher), Arc::new(token_svc));
+        let uc = LoginUser::new(
+            Arc::new(repo),
+            Arc::new(hasher),
+            Arc::new(token_svc),
+            Arc::new(audit),
+        );
         assert_eq!(
             uc.execute(login_request()).await.unwrap_err(),
             DomainError::AccountInactive
@@ -163,12 +231,18 @@ mod tests {
         let mut repo = MockUserRepo::new();
         let mut hasher = MockHasher::new();
         let token_svc = MockTokenSvc::new();
+        let audit = noop_audit();
 
         repo.expect_find_by_email()
             .returning(|_| Ok(Some(make_user(Role::User, true))));
         hasher.expect_verify().returning(|_, _| Ok(false));
 
-        let uc = LoginUser::new(Arc::new(repo), Arc::new(hasher), Arc::new(token_svc));
+        let uc = LoginUser::new(
+            Arc::new(repo),
+            Arc::new(hasher),
+            Arc::new(token_svc),
+            Arc::new(audit),
+        );
         assert_eq!(
             uc.execute(login_request()).await.unwrap_err(),
             DomainError::InvalidCredentials
@@ -180,6 +254,7 @@ mod tests {
         let mut repo = MockUserRepo::new();
         let mut hasher = MockHasher::new();
         let mut token_svc = MockTokenSvc::new();
+        let audit = noop_audit();
 
         repo.expect_find_by_email()
             .returning(|_| Ok(Some(make_user(Role::User, true))));
@@ -191,7 +266,12 @@ mod tests {
             })
         });
 
-        let uc = LoginUser::new(Arc::new(repo), Arc::new(hasher), Arc::new(token_svc));
+        let uc = LoginUser::new(
+            Arc::new(repo),
+            Arc::new(hasher),
+            Arc::new(token_svc),
+            Arc::new(audit),
+        );
         let result = uc.execute(login_request()).await.unwrap();
         assert_eq!(result.access_token, "access");
         assert_eq!(result.refresh_token, "refresh");
