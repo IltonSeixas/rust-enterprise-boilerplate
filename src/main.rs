@@ -15,6 +15,10 @@ use application::use_cases::{
 };
 use config::AppConfig;
 #[cfg(not(feature = "postgres"))]
+use infrastructure::audit::InMemoryAuditLog;
+#[cfg(feature = "postgres")]
+use infrastructure::audit::PostgresAuditLog;
+#[cfg(not(feature = "postgres"))]
 use infrastructure::persistence::InMemoryUserRepository;
 #[cfg(feature = "postgres")]
 use infrastructure::persistence::PostgresUserRepository;
@@ -57,10 +61,18 @@ async fn main() -> anyhow::Result<()> {
     let user_repo: Arc<dyn domain::repositories::UserRepository> =
         Arc::new(PostgresUserRepository::new(pool.clone()))
             as Arc<dyn domain::repositories::UserRepository>;
+    #[cfg(feature = "postgres")]
+    let audit: Arc<dyn application::ports::AuditPort> =
+        Arc::new(PostgresAuditLog::new(pool.clone())) as Arc<dyn application::ports::AuditPort>;
 
     #[cfg(not(feature = "postgres"))]
-    let user_repo: Arc<dyn domain::repositories::UserRepository> =
-        Arc::new(InMemoryUserRepository::new()) as Arc<dyn domain::repositories::UserRepository>;
+    let (user_repo, audit): (
+        Arc<dyn domain::repositories::UserRepository>,
+        Arc<dyn application::ports::AuditPort>,
+    ) = (
+        Arc::new(InMemoryUserRepository::new()) as Arc<dyn domain::repositories::UserRepository>,
+        Arc::new(InMemoryAuditLog::new()) as Arc<dyn application::ports::AuditPort>,
+    );
     let hasher: Arc<dyn application::ports::PasswordHasher> =
         Arc::new(Argon2Hasher::new()) as Arc<dyn application::ports::PasswordHasher>;
     let jwt_private_key =
@@ -91,15 +103,18 @@ async fn main() -> anyhow::Result<()> {
             Arc::clone(&user_repo),
             Arc::clone(&hasher),
             Arc::clone(&token_svc),
+            Arc::clone(&audit),
         )),
         login: Arc::new(LoginUser::new(
             Arc::clone(&user_repo),
             Arc::clone(&hasher),
             Arc::clone(&token_svc),
+            Arc::clone(&audit),
         )),
         refresh: Arc::new(RefreshTokenUseCase::new(
             Arc::clone(&user_repo),
             Arc::clone(&token_svc),
+            Arc::clone(&audit),
         )),
     };
 
@@ -110,8 +125,12 @@ async fn main() -> anyhow::Result<()> {
         change_password: Arc::new(ChangePassword::new(
             Arc::clone(&user_repo),
             Arc::clone(&hasher),
+            Arc::clone(&audit),
         )),
-        change_role: Arc::new(ChangeUserRole::new(Arc::clone(&user_repo))),
+        change_role: Arc::new(ChangeUserRole::new(
+            Arc::clone(&user_repo),
+            Arc::clone(&audit),
+        )),
     };
 
     let auth_mw_state = AuthMiddlewareState {

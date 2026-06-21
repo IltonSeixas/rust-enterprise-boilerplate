@@ -3,17 +3,25 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::{
-    application::dtos::{ChangeRoleRequest, UserResponse},
-    domain::{errors::DomainError, repositories::UserRepository},
+    application::{
+        dtos::{ChangeRoleRequest, UserResponse},
+        ports::AuditPort,
+    },
+    domain::{
+        audit::{AuditEvent, AuditEventType},
+        errors::DomainError,
+        repositories::UserRepository,
+    },
 };
 
 pub struct ChangeUserRole {
     user_repo: Arc<dyn UserRepository>,
+    audit: Arc<dyn AuditPort>,
 }
 
 impl ChangeUserRole {
-    pub fn new(user_repo: Arc<dyn UserRepository>) -> Self {
-        Self { user_repo }
+    pub fn new(user_repo: Arc<dyn UserRepository>, audit: Arc<dyn AuditPort>) -> Self {
+        Self { user_repo, audit }
     }
 
     pub async fn execute(
@@ -34,8 +42,18 @@ impl ChangeUserRole {
             .await?
             .ok_or(DomainError::UserNotFound)?;
 
+        let previous_role = target.role().clone();
         target.change_role(req.role, &actor)?;
         self.user_repo.save(&target).await?;
+
+        self.audit
+            .record(AuditEvent::new(
+                AuditEventType::RoleChanged,
+                Some(actor_id),
+                Some(target_id),
+                format!("from={previous_role} to={}", target.role()),
+            ))
+            .await;
 
         Ok(UserResponse {
             id: target.id().value(),
@@ -72,6 +90,20 @@ mod tests {
         }
     }
 
+    mock! {
+        pub Audit {}
+        #[async_trait::async_trait]
+        impl AuditPort for Audit {
+            async fn record(&self, event: AuditEvent);
+        }
+    }
+
+    fn noop_audit() -> MockAudit {
+        let mut audit = MockAudit::new();
+        audit.expect_record().returning(|_| ());
+        audit
+    }
+
     fn make_user(role: Role) -> User {
         let email = Email::new("user@example.com").unwrap();
         let hash = PasswordHash::from_phc_string("$argon2id$v=19$...".into());
@@ -83,7 +115,7 @@ mod tests {
         let mut repo = MockUserRepo::new();
         repo.expect_find_by_id().returning(|_| Ok(None));
 
-        let uc = ChangeUserRole::new(Arc::new(repo));
+        let uc = ChangeUserRole::new(Arc::new(repo), Arc::new(MockAudit::new()));
         let req = ChangeRoleRequest { role: Role::Admin };
         assert_eq!(
             uc.execute(Uuid::new_v4(), Uuid::new_v4(), req)
@@ -103,7 +135,7 @@ mod tests {
             .returning(move |_| Ok(Some(actor.clone())));
         repo.expect_find_by_id().times(1).returning(|_| Ok(None));
 
-        let uc = ChangeUserRole::new(Arc::new(repo));
+        let uc = ChangeUserRole::new(Arc::new(repo), Arc::new(MockAudit::new()));
         let req = ChangeRoleRequest { role: Role::Admin };
         assert_eq!(
             uc.execute(Uuid::new_v4(), Uuid::new_v4(), req)
@@ -126,7 +158,7 @@ mod tests {
             .times(1)
             .returning(move |_| Ok(Some(target.clone())));
 
-        let uc = ChangeUserRole::new(Arc::new(repo));
+        let uc = ChangeUserRole::new(Arc::new(repo), Arc::new(MockAudit::new()));
         let req = ChangeRoleRequest { role: Role::Admin };
         assert_eq!(
             uc.execute(Uuid::new_v4(), Uuid::new_v4(), req)
@@ -150,7 +182,7 @@ mod tests {
             .times(1)
             .returning(move |_| Ok(Some(owner_for_target.clone())));
 
-        let uc = ChangeUserRole::new(Arc::new(repo));
+        let uc = ChangeUserRole::new(Arc::new(repo), Arc::new(MockAudit::new()));
         let req = ChangeRoleRequest { role: Role::Admin };
         assert_eq!(
             uc.execute(owner_id, owner_id, req).await.unwrap_err(),
@@ -164,6 +196,7 @@ mod tests {
         let actor = make_user(Role::Owner);
         let target = make_user(Role::User);
         let target_id = target.id().value();
+        let audit = noop_audit();
 
         repo.expect_find_by_id()
             .times(1)
@@ -175,7 +208,7 @@ mod tests {
             .withf(|u| u.role() == &Role::Admin)
             .returning(|_| Ok(()));
 
-        let uc = ChangeUserRole::new(Arc::new(repo));
+        let uc = ChangeUserRole::new(Arc::new(repo), Arc::new(audit));
         let req = ChangeRoleRequest { role: Role::Admin };
         let result = uc.execute(Uuid::new_v4(), target_id, req).await.unwrap();
         assert_eq!(result.role, Role::Admin);

@@ -3,9 +3,10 @@ use std::sync::Arc;
 use crate::{
     application::{
         dtos::{AuthResponse, RegisterRequest, UserSummary},
-        ports::{PasswordHasher, TokenService},
+        ports::{AuditPort, PasswordHasher, TokenService},
     },
     domain::{
+        audit::{AuditEvent, AuditEventType},
         entities::{Role, User},
         errors::DomainError,
         repositories::UserRepository,
@@ -17,6 +18,7 @@ pub struct RegisterUser {
     user_repo: Arc<dyn UserRepository>,
     hasher: Arc<dyn PasswordHasher>,
     token_svc: Arc<dyn TokenService>,
+    audit: Arc<dyn AuditPort>,
 }
 
 impl RegisterUser {
@@ -24,11 +26,13 @@ impl RegisterUser {
         user_repo: Arc<dyn UserRepository>,
         hasher: Arc<dyn PasswordHasher>,
         token_svc: Arc<dyn TokenService>,
+        audit: Arc<dyn AuditPort>,
     ) -> Self {
         Self {
             user_repo,
             hasher,
             token_svc,
+            audit,
         }
     }
 
@@ -61,6 +65,15 @@ impl RegisterUser {
             .token_svc
             .generate_pair(user.id().value(), user.role())
             .await?;
+
+        self.audit
+            .record(AuditEvent::new(
+                AuditEventType::UserRegistered,
+                Some(user.id().value()),
+                Some(user.id().value()),
+                format!("role={}", user.role()),
+            ))
+            .await;
 
         Ok(AuthResponse {
             access_token: tokens.access_token,
@@ -116,12 +129,32 @@ mod tests {
         }
     }
 
+    mock! {
+        pub Audit {}
+        #[async_trait::async_trait]
+        impl AuditPort for Audit {
+            async fn record(&self, event: AuditEvent);
+        }
+    }
+
+    fn noop_audit() -> MockAudit {
+        let mut audit = MockAudit::new();
+        audit.expect_record().returning(|_| ());
+        audit
+    }
+
     #[tokio::test]
     async fn rejects_short_password() {
         let repo = MockUserRepo::new();
         let hasher = MockHasher::new();
         let token_svc = MockTokenSvc::new();
-        let uc = RegisterUser::new(Arc::new(repo), Arc::new(hasher), Arc::new(token_svc));
+        let audit = MockAudit::new();
+        let uc = RegisterUser::new(
+            Arc::new(repo),
+            Arc::new(hasher),
+            Arc::new(token_svc),
+            Arc::new(audit),
+        );
 
         let req = RegisterRequest {
             email: "a@b.com".into(),
@@ -139,6 +172,7 @@ mod tests {
         let mut repo = MockUserRepo::new();
         let hasher = MockHasher::new();
         let token_svc = MockTokenSvc::new();
+        let audit = MockAudit::new();
 
         repo.expect_find_by_email().returning(|_| {
             let email = Email::new("a@b.com").unwrap();
@@ -147,7 +181,12 @@ mod tests {
             Ok(Some(user))
         });
 
-        let uc = RegisterUser::new(Arc::new(repo), Arc::new(hasher), Arc::new(token_svc));
+        let uc = RegisterUser::new(
+            Arc::new(repo),
+            Arc::new(hasher),
+            Arc::new(token_svc),
+            Arc::new(audit),
+        );
         let req = RegisterRequest {
             email: "a@b.com".into(),
             password: "strongpassword1234".into(),
@@ -164,6 +203,7 @@ mod tests {
         let mut repo = MockUserRepo::new();
         let mut hasher = MockHasher::new();
         let mut token_svc = MockTokenSvc::new();
+        let audit = noop_audit();
 
         repo.expect_find_by_email().returning(|_| Ok(None));
         repo.expect_save_first_owner().returning(|_| Ok(true));
@@ -181,7 +221,12 @@ mod tests {
             })
         });
 
-        let uc = RegisterUser::new(Arc::new(repo), Arc::new(hasher), Arc::new(token_svc));
+        let uc = RegisterUser::new(
+            Arc::new(repo),
+            Arc::new(hasher),
+            Arc::new(token_svc),
+            Arc::new(audit),
+        );
         let req = RegisterRequest {
             email: "owner@example.com".into(),
             password: "strongpassword1234".into(),
@@ -196,6 +241,7 @@ mod tests {
         let mut repo = MockUserRepo::new();
         let mut hasher = MockHasher::new();
         let mut token_svc = MockTokenSvc::new();
+        let audit = noop_audit();
 
         repo.expect_find_by_email().returning(|_| Ok(None));
         repo.expect_save_first_owner().returning(|_| Ok(false));
@@ -214,7 +260,12 @@ mod tests {
             })
         });
 
-        let uc = RegisterUser::new(Arc::new(repo), Arc::new(hasher), Arc::new(token_svc));
+        let uc = RegisterUser::new(
+            Arc::new(repo),
+            Arc::new(hasher),
+            Arc::new(token_svc),
+            Arc::new(audit),
+        );
         let req = RegisterRequest {
             email: "member@example.com".into(),
             password: "strongpassword1234".into(),
