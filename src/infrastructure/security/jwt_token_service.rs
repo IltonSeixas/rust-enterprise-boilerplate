@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::{
     application::ports::{AccessTokenClaims, TokenPair, TokenService},
     domain::{entities::Role, errors::DomainError},
+    infrastructure::resilience::{call_with_resilience, CircuitBreaker, RetryPolicy},
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -24,6 +25,8 @@ pub struct JwtTokenService {
     access_ttl_seconds: i64,
     refresh_ttl_seconds: i64,
     redis: redis::aio::ConnectionManager,
+    redis_breaker: CircuitBreaker,
+    retry_policy: RetryPolicy,
 }
 
 impl JwtTokenService {
@@ -35,6 +38,8 @@ impl JwtTokenService {
         access_ttl_seconds: i64,
         refresh_ttl_seconds: i64,
         redis: redis::aio::ConnectionManager,
+        redis_breaker: CircuitBreaker,
+        retry_policy: RetryPolicy,
     ) -> Result<Self, jsonwebtoken::errors::Error> {
         Ok(Self {
             encoding_key: EncodingKey::from_ed_pem(private_key_pem)?,
@@ -42,6 +47,8 @@ impl JwtTokenService {
             access_ttl_seconds,
             refresh_ttl_seconds,
             redis,
+            redis_breaker,
+            retry_policy,
         })
     }
 
@@ -66,15 +73,20 @@ impl TokenService for JwtTokenService {
 
         let refresh_token = Uuid::new_v4().to_string();
 
-        let mut conn = self.redis.clone();
-        let _: () = conn
-            .set_ex(
-                Self::redis_key(&refresh_token),
-                user_id.to_string(),
-                self.refresh_ttl_seconds as u64,
-            )
-            .await
-            .map_err(|e| DomainError::Repository(e.to_string()))?;
+        call_with_resilience(&self.redis_breaker, &self.retry_policy, || {
+            let mut conn = self.redis.clone();
+            let key = Self::redis_key(&refresh_token);
+            let value = user_id.to_string();
+            let ttl = self.refresh_ttl_seconds as u64;
+            async move {
+                let _: () = conn
+                    .set_ex(key, value, ttl)
+                    .await
+                    .map_err(|e| DomainError::Repository(e.to_string()))?;
+                Ok(())
+            }
+        })
+        .await?;
 
         Ok(TokenPair {
             access_token,
@@ -103,11 +115,17 @@ impl TokenService for JwtTokenService {
         &self,
         token: &str,
     ) -> Result<Option<Uuid>, DomainError> {
-        let mut conn = self.redis.clone();
-        let stored: Option<String> = conn
-            .get(Self::redis_key(token))
-            .await
-            .map_err(|e| DomainError::Repository(e.to_string()))?;
+        let stored: Option<String> =
+            call_with_resilience(&self.redis_breaker, &self.retry_policy, || {
+                let mut conn = self.redis.clone();
+                let key = Self::redis_key(token);
+                async move {
+                    conn.get(key)
+                        .await
+                        .map_err(|e| DomainError::Repository(e.to_string()))
+                }
+            })
+            .await?;
 
         match stored {
             Some(raw) => Uuid::parse_str(&raw)
@@ -123,33 +141,53 @@ impl TokenService for JwtTokenService {
         user_id: Uuid,
         role: &Role,
     ) -> Result<TokenPair, DomainError> {
-        let mut conn = self.redis.clone();
         let key = Self::redis_key(old_token);
 
-        let stored: Option<String> = conn
-            .get(&key)
-            .await
-            .map_err(|e| DomainError::Repository(e.to_string()))?;
+        let stored: Option<String> =
+            call_with_resilience(&self.redis_breaker, &self.retry_policy, || {
+                let mut conn = self.redis.clone();
+                let key = key.clone();
+                async move {
+                    conn.get(key)
+                        .await
+                        .map_err(|e| DomainError::Repository(e.to_string()))
+                }
+            })
+            .await?;
 
         if stored.as_deref() != Some(&user_id.to_string()) {
             return Err(DomainError::InvalidCredentials);
         }
 
-        let _: () = conn
-            .del(&key)
-            .await
-            .map_err(|e| DomainError::Repository(e.to_string()))?;
+        call_with_resilience(&self.redis_breaker, &self.retry_policy, || {
+            let mut conn = self.redis.clone();
+            let key = key.clone();
+            async move {
+                let _: () = conn
+                    .del(key)
+                    .await
+                    .map_err(|e| DomainError::Repository(e.to_string()))?;
+                Ok(())
+            }
+        })
+        .await?;
 
         self.generate_pair(user_id, role).await
     }
 
     async fn revoke_refresh_token(&self, token: &str) -> Result<(), DomainError> {
-        let mut conn = self.redis.clone();
-        let _: () = conn
-            .del(Self::redis_key(token))
-            .await
-            .map_err(|e| DomainError::Repository(e.to_string()))?;
-        Ok(())
+        call_with_resilience(&self.redis_breaker, &self.retry_policy, || {
+            let mut conn = self.redis.clone();
+            let key = Self::redis_key(token);
+            async move {
+                let _: () = conn
+                    .del(key)
+                    .await
+                    .map_err(|e| DomainError::Repository(e.to_string()))?;
+                Ok(())
+            }
+        })
+        .await
     }
 }
 
