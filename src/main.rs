@@ -27,7 +27,9 @@ use interfaces::{
     grpc::{AuthGrpcService, AuthServiceServer, UserGrpcService, UserServiceServer},
     http::{
         build_router,
-        handlers::{auth_handler::AuthState, user_handler::UserState},
+        handlers::{
+            auth_handler::AuthState, health_handler::HealthState, user_handler::UserState,
+        },
         middleware::AuthMiddlewareState,
         RouterConfig,
     },
@@ -49,11 +51,14 @@ async fn main() -> anyhow::Result<()> {
     let redis_conn = redis::aio::ConnectionManager::new(redis_client).await?;
 
     #[cfg(feature = "postgres")]
-    let user_repo: Arc<dyn domain::repositories::UserRepository> = {
-        let pool = sqlx::PgPool::connect(&cfg.database_url).await?;
-        sqlx::migrate!("./migrations").run(&pool).await?;
-        Arc::new(PostgresUserRepository::new(pool)) as Arc<dyn domain::repositories::UserRepository>
-    };
+    let pool = sqlx::PgPool::connect(&cfg.database_url).await?;
+    #[cfg(feature = "postgres")]
+    sqlx::migrate!("./migrations").run(&pool).await?;
+
+    #[cfg(feature = "postgres")]
+    let user_repo: Arc<dyn domain::repositories::UserRepository> = Arc::new(
+        PostgresUserRepository::new(pool.clone()),
+    ) as Arc<dyn domain::repositories::UserRepository>;
 
     #[cfg(not(feature = "postgres"))]
     let user_repo: Arc<dyn domain::repositories::UserRepository> =
@@ -75,7 +80,7 @@ async fn main() -> anyhow::Result<()> {
             &jwt_public_key,
             cfg.jwt_access_ttl_seconds,
             cfg.jwt_refresh_ttl_seconds,
-            redis_conn,
+            redis_conn.clone(),
             redis_breaker,
             resilience_cfg.retry_policy(),
         )
@@ -116,6 +121,12 @@ async fn main() -> anyhow::Result<()> {
         user_repo: Arc::clone(&user_repo),
     };
 
+    let health_state = HealthState {
+        redis: redis_conn,
+        #[cfg(feature = "postgres")]
+        database: pool,
+    };
+
     let auth_grpc = AuthGrpcService {
         register: Arc::clone(&auth_state.register),
         login: Arc::clone(&auth_state.login),
@@ -140,6 +151,7 @@ async fn main() -> anyhow::Result<()> {
         auth_state,
         user_state,
         auth_mw_state,
+        health_state,
         metrics_handle,
         router_cfg,
     );
