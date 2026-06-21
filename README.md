@@ -129,6 +129,10 @@ The `PasswordHasher` trait abstracts the algorithm — the domain never touches 
 - CORS: explicit allow-list via `ALLOWED_ORIGINS`, never `*` — unlisted origins receive no CORS headers
 - Input validation: self-validating domain value objects (`Email`, `PasswordHash`, ...) reject malformed input at construction time
 
+### Audit Logging
+
+Every identity- and access-sensitive use case (registration, login success/failure, password change, role change, token refresh) records an immutable `AuditEvent` through the `AuditPort` trait in `application/ports/`. The in-memory adapter is the zero-config default; the PostgreSQL adapter persists to a dedicated `audit_log` table and never fails the use case it observes, degrading gracefully if the audit store itself is unavailable.
+
 ---
 
 ## API
@@ -198,6 +202,10 @@ Export traces to any OTLP-compatible backend (Jaeger, Grafana Tempo, Honeycomb, 
 ```env
 OTLP_ENDPOINT=http://localhost:4317
 ```
+
+### Resilience
+
+Redis calls made by `JwtTokenService` (refresh token issuance, validation, rotation and revocation) are wrapped in a `Closed → Open → Half-Open` circuit breaker (`infrastructure/resilience/circuit_breaker.rs`) combined with a retry policy. A transient Redis failure that succeeds on retry counts as a single success against the breaker's failure rate, rather than inflating it.
 
 ---
 
