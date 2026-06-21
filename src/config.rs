@@ -25,6 +25,16 @@ pub struct AppConfig {
     pub rate_limit_per_second: u64,
     #[serde(default = "default_rate_limit_burst")]
     pub rate_limit_burst: u32,
+    #[serde(default = "default_cb_failure_threshold")]
+    pub circuit_breaker_failure_threshold: u32,
+    #[serde(default = "default_cb_reset_timeout_ms")]
+    pub circuit_breaker_reset_timeout_ms: u64,
+    #[serde(default = "default_retry_max_attempts")]
+    pub retry_max_attempts: u32,
+    #[serde(default = "default_retry_initial_backoff_ms")]
+    pub retry_initial_backoff_ms: u64,
+    #[serde(default = "default_retry_backoff_multiplier")]
+    pub retry_backoff_multiplier: u32,
 }
 
 fn default_host() -> String {
@@ -63,6 +73,26 @@ fn default_otlp_endpoint() -> String {
     "http://localhost:4317".into()
 }
 
+fn default_cb_failure_threshold() -> u32 {
+    5
+}
+
+fn default_cb_reset_timeout_ms() -> u64 {
+    30_000
+}
+
+fn default_retry_max_attempts() -> u32 {
+    3
+}
+
+fn default_retry_initial_backoff_ms() -> u64 {
+    50
+}
+
+fn default_retry_backoff_multiplier() -> u32 {
+    2
+}
+
 impl AppConfig {
     pub fn from_env() -> Result<Self, config::ConfigError> {
         dotenvy::dotenv().ok();
@@ -82,5 +112,15 @@ impl AppConfig {
             .filter(|origin| !origin.is_empty())
             .map(String::from)
             .collect()
+    }
+
+    pub fn resilience(&self) -> crate::infrastructure::resilience::ResilienceConfig {
+        crate::infrastructure::resilience::ResilienceConfig {
+            failure_threshold: self.circuit_breaker_failure_threshold,
+            reset_timeout_ms: self.circuit_breaker_reset_timeout_ms,
+            retry_max_attempts: self.retry_max_attempts,
+            retry_initial_backoff_ms: self.retry_initial_backoff_ms,
+            retry_backoff_multiplier: self.retry_backoff_multiplier,
+        }
     }
 }

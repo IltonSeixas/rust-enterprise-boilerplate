@@ -31,4 +31,7 @@ pub enum DomainError {
 
     #[error("repository error: {0}")]
     Repository(String),
+
+    #[error("service temporarily unavailable")]
+    ServiceUnavailable,
 }

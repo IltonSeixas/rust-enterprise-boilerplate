@@ -14,9 +14,11 @@ use tower_http::trace::TraceLayer;
 use crate::interfaces::http::{
     handlers::{
         auth_handler::{login, refresh, register, AuthState},
-        health_handler::{health, ready},
+        health_handler::{health, ready, HealthState},
         metrics_handler::metrics,
-        user_handler::{change_password, change_role, get_me, get_user, update_me, UserState},
+        user_handler::{
+            change_password, change_role, get_me, get_user, list_users, update_me, UserState,
+        },
     },
     middleware::{build_cors_layer, require_auth, security_headers, AuthMiddlewareState},
 };
@@ -31,6 +33,7 @@ pub fn build_router(
     auth_state: AuthState,
     user_state: UserState,
     auth_mw_state: AuthMiddlewareState,
+    health_state: HealthState,
     metrics_handle: PrometheusHandle,
     router_cfg: RouterConfig,
 ) -> Router {
@@ -43,7 +46,7 @@ pub fn build_router(
         .expect("invalid rate limiter configuration");
     let public_routes = Router::new()
         .route("/health", get(health))
-        .route("/ready", get(ready))
+        .route("/ready", get(ready).with_state(health_state.clone()))
         .route("/metrics", get(metrics).with_state(metrics_handle))
         .nest(
             "/v1/auth",
@@ -60,6 +63,7 @@ pub fn build_router(
             Router::new()
                 .route("/me", get(get_me).put(update_me))
                 .route("/me/password", put(change_password))
+                .route("/", get(list_users))
                 .route("/:id", get(get_user))
                 .route("/:id/role", put(change_role))
                 .with_state(user_state),

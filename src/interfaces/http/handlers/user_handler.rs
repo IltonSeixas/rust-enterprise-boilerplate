@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::{
-    extract::{Extension, Path, State},
+    extract::{Extension, Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -10,8 +10,8 @@ use uuid::Uuid;
 
 use crate::{
     application::{
-        dtos::{ChangePasswordRequest, ChangeRoleRequest, UpdateProfileRequest},
-        use_cases::{ChangePassword, ChangeUserRole, GetUser, UpdateProfile},
+        dtos::{ChangePasswordRequest, ChangeRoleRequest, ListUsersQuery, UpdateProfileRequest},
+        use_cases::{ChangePassword, ChangeUserRole, GetUser, ListUsers, UpdateProfile},
     },
     domain::entities::Role,
     interfaces::http::middleware::AuthenticatedUser,
@@ -20,6 +20,7 @@ use crate::{
 #[derive(Clone)]
 pub struct UserState {
     pub get_user: Arc<GetUser>,
+    pub list_users: Arc<ListUsers>,
     pub update_profile: Arc<UpdateProfile>,
     pub change_password: Arc<ChangePassword>,
     pub change_role: Arc<ChangeUserRole>,
@@ -71,6 +72,25 @@ pub async fn get_user(
     }
 
     match state.get_user.execute(id).await {
+        Ok(resp) => (StatusCode::OK, Json(resp)).into_response(),
+        Err(e) => super::error_response(e),
+    }
+}
+
+pub async fn list_users(
+    Extension(auth): Extension<AuthenticatedUser>,
+    State(state): State<UserState>,
+    Query(query): Query<ListUsersQuery>,
+) -> impl IntoResponse {
+    if !auth.role.can_manage_roles() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({ "error": "insufficient permissions" })),
+        )
+            .into_response();
+    }
+
+    match state.list_users.execute(query).await {
         Ok(resp) => (StatusCode::OK, Json(resp)).into_response(),
         Err(e) => super::error_response(e),
     }
