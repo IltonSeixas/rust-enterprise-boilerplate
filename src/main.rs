@@ -10,8 +10,8 @@ mod infrastructure;
 mod interfaces;
 
 use application::use_cases::{
-    ChangePassword, ChangeUserRole, GetUser, LoginUser, RefreshTokenUseCase, RegisterUser,
-    UpdateProfile,
+    ChangePassword, ChangeUserRole, GetUser, ListUsers, LoginUser, RefreshTokenUseCase,
+    RegisterUser, UpdateProfile,
 };
 use config::AppConfig;
 #[cfg(not(feature = "postgres"))]
@@ -19,6 +19,7 @@ use infrastructure::persistence::InMemoryUserRepository;
 #[cfg(feature = "postgres")]
 use infrastructure::persistence::PostgresUserRepository;
 use infrastructure::{
+    resilience::CircuitBreaker,
     security::{Argon2Hasher, JwtTokenService},
     telemetry::{init_prometheus, init_tracing},
 };
@@ -26,7 +27,7 @@ use interfaces::{
     grpc::{AuthGrpcService, AuthServiceServer, UserGrpcService, UserServiceServer},
     http::{
         build_router,
-        handlers::{auth_handler::AuthState, user_handler::UserState},
+        handlers::{auth_handler::AuthState, health_handler::HealthState, user_handler::UserState},
         middleware::AuthMiddlewareState,
         RouterConfig,
     },
@@ -48,11 +49,14 @@ async fn main() -> anyhow::Result<()> {
     let redis_conn = redis::aio::ConnectionManager::new(redis_client).await?;
 
     #[cfg(feature = "postgres")]
-    let user_repo: Arc<dyn domain::repositories::UserRepository> = {
-        let pool = sqlx::PgPool::connect(&cfg.database_url).await?;
-        sqlx::migrate!("./migrations").run(&pool).await?;
-        Arc::new(PostgresUserRepository::new(pool)) as Arc<dyn domain::repositories::UserRepository>
-    };
+    let pool = sqlx::PgPool::connect(&cfg.database_url).await?;
+    #[cfg(feature = "postgres")]
+    sqlx::migrate!("./migrations").run(&pool).await?;
+
+    #[cfg(feature = "postgres")]
+    let user_repo: Arc<dyn domain::repositories::UserRepository> =
+        Arc::new(PostgresUserRepository::new(pool.clone()))
+            as Arc<dyn domain::repositories::UserRepository>;
 
     #[cfg(not(feature = "postgres"))]
     let user_repo: Arc<dyn domain::repositories::UserRepository> =
@@ -63,13 +67,20 @@ async fn main() -> anyhow::Result<()> {
         std::fs::read(&cfg.jwt_private_key_path).expect("failed to read JWT_PRIVATE_KEY_PATH");
     let jwt_public_key =
         std::fs::read(&cfg.jwt_public_key_path).expect("failed to read JWT_PUBLIC_KEY_PATH");
+    let resilience_cfg = cfg.resilience();
+    let redis_breaker = CircuitBreaker::new(
+        resilience_cfg.failure_threshold,
+        resilience_cfg.reset_timeout_ms,
+    );
     let token_svc: Arc<dyn application::ports::TokenService> = Arc::new(
         JwtTokenService::new(
             &jwt_private_key,
             &jwt_public_key,
             cfg.jwt_access_ttl_seconds,
             cfg.jwt_refresh_ttl_seconds,
-            redis_conn,
+            redis_conn.clone(),
+            redis_breaker,
+            resilience_cfg.retry_policy(),
         )
         .expect("failed to load Ed25519 JWT keys"),
     )
@@ -94,6 +105,7 @@ async fn main() -> anyhow::Result<()> {
 
     let user_state = UserState {
         get_user: Arc::new(GetUser::new(Arc::clone(&user_repo))),
+        list_users: Arc::new(ListUsers::new(Arc::clone(&user_repo))),
         update_profile: Arc::new(UpdateProfile::new(Arc::clone(&user_repo))),
         change_password: Arc::new(ChangePassword::new(
             Arc::clone(&user_repo),
@@ -107,6 +119,12 @@ async fn main() -> anyhow::Result<()> {
         user_repo: Arc::clone(&user_repo),
     };
 
+    let health_state = HealthState {
+        redis: redis_conn,
+        #[cfg(feature = "postgres")]
+        database: pool,
+    };
+
     let auth_grpc = AuthGrpcService {
         register: Arc::clone(&auth_state.register),
         login: Arc::clone(&auth_state.login),
@@ -114,6 +132,7 @@ async fn main() -> anyhow::Result<()> {
     };
     let user_grpc = UserGrpcService {
         get_user: Arc::clone(&user_state.get_user),
+        list_users: Arc::clone(&user_state.list_users),
         update_profile: Arc::clone(&user_state.update_profile),
         change_password: Arc::clone(&user_state.change_password),
         change_role: Arc::clone(&user_state.change_role),
@@ -130,6 +149,7 @@ async fn main() -> anyhow::Result<()> {
         auth_state,
         user_state,
         auth_mw_state,
+        health_state,
         metrics_handle,
         router_cfg,
     );

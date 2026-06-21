@@ -23,6 +23,7 @@ pub fn error_response(err: DomainError) -> axum::response::Response {
             StatusCode::INTERNAL_SERVER_ERROR,
             "internal server error".into(),
         ),
+        DomainError::ServiceUnavailable => (StatusCode::SERVICE_UNAVAILABLE, err.to_string()),
     };
 
     (status, Json(json!({ "error": message }))).into_response()

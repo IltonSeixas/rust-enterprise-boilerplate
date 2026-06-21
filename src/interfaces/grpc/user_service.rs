@@ -6,10 +6,11 @@ use crate::{
     application::{
         dtos::{
             ChangePasswordRequest as ChangePasswordDto, ChangeRoleRequest as ChangeRoleDto,
-            UpdateProfileRequest as UpdateProfileDto, UserResponse as UserResponseDto,
+            ListUsersQuery as ListUsersQueryDto, UpdateProfileRequest as UpdateProfileDto,
+            UserResponse as UserResponseDto,
         },
         ports::TokenService,
-        use_cases::{ChangePassword, ChangeUserRole, GetUser, UpdateProfile},
+        use_cases::{ChangePassword, ChangeUserRole, GetUser, ListUsers, UpdateProfile},
     },
     domain::{entities::Role, errors::DomainError, repositories::UserRepository},
 };
@@ -19,12 +20,14 @@ use super::{
     interceptor::authenticate,
     proto::{
         user_service_server::UserService, ChangePasswordRequest, ChangePasswordResponse,
-        ChangeRoleRequest, GetMeRequest, UpdateProfileRequest, UserResponse,
+        ChangeRoleRequest, GetMeRequest, ListUsersRequest, ListUsersResponse, PaginationMetadata,
+        UpdateProfileRequest, UserResponse,
     },
 };
 
 pub struct UserGrpcService {
     pub get_user: Arc<GetUser>,
+    pub list_users: Arc<ListUsers>,
     pub update_profile: Arc<UpdateProfile>,
     pub change_password: Arc<ChangePassword>,
     pub change_role: Arc<ChangeUserRole>,
@@ -54,6 +57,35 @@ impl UserService for UserGrpcService {
 
         let resp = self.get_user.execute(caller.id).await.map_err(to_status)?;
         Ok(Response::new(to_proto_response(resp)))
+    }
+
+    async fn list_users(
+        &self,
+        request: Request<ListUsersRequest>,
+    ) -> Result<Response<ListUsersResponse>, Status> {
+        let caller = authenticate(&request, &self.token_svc, &self.user_repo).await?;
+
+        if !caller.role.can_manage_roles() {
+            return Err(to_status(DomainError::InsufficientPermissions));
+        }
+
+        let req = request.into_inner();
+        let query = ListUsersQueryDto {
+            page: (req.page > 0).then_some(req.page),
+            page_size: (req.page_size > 0).then_some(req.page_size),
+        };
+
+        let resp = self.list_users.execute(query).await.map_err(to_status)?;
+
+        Ok(Response::new(ListUsersResponse {
+            items: resp.items.into_iter().map(to_proto_response).collect(),
+            pagination: Some(PaginationMetadata {
+                page: resp.pagination.page,
+                page_size: resp.pagination.page_size,
+                total_items: resp.pagination.total_items,
+                total_pages: resp.pagination.total_pages,
+            }),
+        }))
     }
 
     async fn update_profile(

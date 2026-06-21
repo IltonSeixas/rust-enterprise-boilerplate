@@ -67,6 +67,29 @@ impl UserRepository for InMemoryUserRepository {
         store.insert(user.id().value(), user.clone());
         Ok(true)
     }
+
+    async fn find_paginated(
+        &self,
+        offset: u64,
+        limit: u64,
+    ) -> Result<(Vec<User>, u64), DomainError> {
+        let store = self.store.read().await;
+        let mut users: Vec<User> = store.values().cloned().collect();
+        users.sort_by(|a, b| {
+            a.created_at()
+                .cmp(&b.created_at())
+                .then_with(|| a.id().value().cmp(&b.id().value()))
+        });
+
+        let total = users.len() as u64;
+        let page = users
+            .into_iter()
+            .skip(offset as usize)
+            .take(limit as usize)
+            .collect();
+
+        Ok((page, total))
+    }
 }
 
 #[cfg(test)]
@@ -150,5 +173,29 @@ mod tests {
         assert!(!second);
 
         assert_eq!(repo.count().await.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn find_paginated_returns_requested_slice_and_total() {
+        let repo = InMemoryUserRepository::new();
+        for i in 0..5 {
+            repo.save(&make_user(&format!("user{i}@example.com")))
+                .await
+                .unwrap();
+        }
+
+        let (page, total) = repo.find_paginated(1, 2).await.unwrap();
+        assert_eq!(total, 5);
+        assert_eq!(page.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn find_paginated_returns_empty_page_past_the_end() {
+        let repo = InMemoryUserRepository::new();
+        repo.save(&make_user("solo@example.com")).await.unwrap();
+
+        let (page, total) = repo.find_paginated(10, 20).await.unwrap();
+        assert_eq!(total, 1);
+        assert!(page.is_empty());
     }
 }
