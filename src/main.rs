@@ -19,6 +19,7 @@ use infrastructure::persistence::InMemoryUserRepository;
 #[cfg(feature = "postgres")]
 use infrastructure::persistence::PostgresUserRepository;
 use infrastructure::{
+    resilience::CircuitBreaker,
     security::{Argon2Hasher, JwtTokenService},
     telemetry::{init_prometheus, init_tracing},
 };
@@ -63,6 +64,11 @@ async fn main() -> anyhow::Result<()> {
         std::fs::read(&cfg.jwt_private_key_path).expect("failed to read JWT_PRIVATE_KEY_PATH");
     let jwt_public_key =
         std::fs::read(&cfg.jwt_public_key_path).expect("failed to read JWT_PUBLIC_KEY_PATH");
+    let resilience_cfg = cfg.resilience();
+    let redis_breaker = CircuitBreaker::new(
+        resilience_cfg.failure_threshold,
+        resilience_cfg.reset_timeout_ms,
+    );
     let token_svc: Arc<dyn application::ports::TokenService> = Arc::new(
         JwtTokenService::new(
             &jwt_private_key,
@@ -70,6 +76,8 @@ async fn main() -> anyhow::Result<()> {
             cfg.jwt_access_ttl_seconds,
             cfg.jwt_refresh_ttl_seconds,
             redis_conn,
+            redis_breaker,
+            resilience_cfg.retry_policy(),
         )
         .expect("failed to load Ed25519 JWT keys"),
     )

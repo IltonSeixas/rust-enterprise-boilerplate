@@ -15,6 +15,7 @@ pub fn to_status(err: DomainError) -> Status {
             Code::PermissionDenied
         }
         DomainError::Repository(_) => Code::Internal,
+        DomainError::ServiceUnavailable => Code::Unavailable,
     };
 
     Status::new(code, err.to_string())
