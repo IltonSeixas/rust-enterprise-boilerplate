@@ -27,9 +27,7 @@ use interfaces::{
     grpc::{AuthGrpcService, AuthServiceServer, UserGrpcService, UserServiceServer},
     http::{
         build_router,
-        handlers::{
-            auth_handler::AuthState, health_handler::HealthState, user_handler::UserState,
-        },
+        handlers::{auth_handler::AuthState, health_handler::HealthState, user_handler::UserState},
         middleware::AuthMiddlewareState,
         RouterConfig,
     },
@@ -56,9 +54,9 @@ async fn main() -> anyhow::Result<()> {
     sqlx::migrate!("./migrations").run(&pool).await?;
 
     #[cfg(feature = "postgres")]
-    let user_repo: Arc<dyn domain::repositories::UserRepository> = Arc::new(
-        PostgresUserRepository::new(pool.clone()),
-    ) as Arc<dyn domain::repositories::UserRepository>;
+    let user_repo: Arc<dyn domain::repositories::UserRepository> =
+        Arc::new(PostgresUserRepository::new(pool.clone()))
+            as Arc<dyn domain::repositories::UserRepository>;
 
     #[cfg(not(feature = "postgres"))]
     let user_repo: Arc<dyn domain::repositories::UserRepository> =
