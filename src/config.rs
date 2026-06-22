@@ -174,6 +174,8 @@ mod tests {
     fn set_required_env() {
         std::env::set_var("JWT_PRIVATE_KEY_PATH", "/tmp/private.pem");
         std::env::set_var("JWT_PUBLIC_KEY_PATH", "/tmp/public.pem");
+        #[cfg(feature = "postgres")]
+        std::env::set_var("DATABASE_URL", "postgres://user:pass@localhost/db");
     }
 
     fn clear_pool_env() {
