@@ -27,6 +27,7 @@ pub struct JwtTokenService {
     redis: redis::aio::ConnectionManager,
     redis_breaker: CircuitBreaker,
     retry_policy: RetryPolicy,
+    command_timeout: std::time::Duration,
 }
 
 impl JwtTokenService {
@@ -40,6 +41,7 @@ impl JwtTokenService {
         redis: redis::aio::ConnectionManager,
         redis_breaker: CircuitBreaker,
         retry_policy: RetryPolicy,
+        redis_command_timeout_ms: u64,
     ) -> Result<Self, jsonwebtoken::errors::Error> {
         Ok(Self {
             encoding_key: EncodingKey::from_ed_pem(private_key_pem)?,
@@ -49,6 +51,7 @@ impl JwtTokenService {
             redis,
             redis_breaker,
             retry_policy,
+            command_timeout: std::time::Duration::from_millis(redis_command_timeout_ms),
         })
     }
 
@@ -78,12 +81,17 @@ impl TokenService for JwtTokenService {
             let key = Self::redis_key(&refresh_token);
             let value = user_id.to_string();
             let ttl = self.refresh_ttl_seconds as u64;
+            let timeout = self.command_timeout;
             async move {
-                let _: () = conn
-                    .set_ex(key, value, ttl)
-                    .await
-                    .map_err(|e| DomainError::Repository(e.to_string()))?;
-                Ok(())
+                tokio::time::timeout(timeout, async {
+                    let _: () = conn
+                        .set_ex(key, value, ttl)
+                        .await
+                        .map_err(|e| DomainError::Repository(e.to_string()))?;
+                    Ok(())
+                })
+                .await
+                .map_err(|_| DomainError::Repository("redis command timed out".into()))?
             }
         })
         .await?;
@@ -119,9 +127,11 @@ impl TokenService for JwtTokenService {
             call_with_resilience(&self.redis_breaker, &self.retry_policy, || {
                 let mut conn = self.redis.clone();
                 let key = Self::redis_key(token);
+                let timeout = self.command_timeout;
                 async move {
-                    conn.get(key)
+                    tokio::time::timeout(timeout, conn.get(key))
                         .await
+                        .map_err(|_| DomainError::Repository("redis command timed out".into()))?
                         .map_err(|e| DomainError::Repository(e.to_string()))
                 }
             })
@@ -147,9 +157,11 @@ impl TokenService for JwtTokenService {
             call_with_resilience(&self.redis_breaker, &self.retry_policy, || {
                 let mut conn = self.redis.clone();
                 let key = key.clone();
+                let timeout = self.command_timeout;
                 async move {
-                    conn.get(key)
+                    tokio::time::timeout(timeout, conn.get(key))
                         .await
+                        .map_err(|_| DomainError::Repository("redis command timed out".into()))?
                         .map_err(|e| DomainError::Repository(e.to_string()))
                 }
             })
@@ -162,12 +174,17 @@ impl TokenService for JwtTokenService {
         call_with_resilience(&self.redis_breaker, &self.retry_policy, || {
             let mut conn = self.redis.clone();
             let key = key.clone();
+            let timeout = self.command_timeout;
             async move {
-                let _: () = conn
-                    .del(key)
-                    .await
-                    .map_err(|e| DomainError::Repository(e.to_string()))?;
-                Ok(())
+                tokio::time::timeout(timeout, async {
+                    let _: () = conn
+                        .del(key)
+                        .await
+                        .map_err(|e| DomainError::Repository(e.to_string()))?;
+                    Ok(())
+                })
+                .await
+                .map_err(|_| DomainError::Repository("redis command timed out".into()))?
             }
         })
         .await?;
@@ -179,12 +196,17 @@ impl TokenService for JwtTokenService {
         call_with_resilience(&self.redis_breaker, &self.retry_policy, || {
             let mut conn = self.redis.clone();
             let key = Self::redis_key(token);
+            let timeout = self.command_timeout;
             async move {
-                let _: () = conn
-                    .del(key)
-                    .await
-                    .map_err(|e| DomainError::Repository(e.to_string()))?;
-                Ok(())
+                tokio::time::timeout(timeout, async {
+                    let _: () = conn
+                        .del(key)
+                        .await
+                        .map_err(|e| DomainError::Repository(e.to_string()))?;
+                    Ok(())
+                })
+                .await
+                .map_err(|_| DomainError::Repository("redis command timed out".into()))?
             }
         })
         .await
@@ -259,5 +281,21 @@ MCowBQYDK2VwAyEAYohTHzpULkk0AienlYBbqC2uo/qmBiT3T33RvH/0pTE=
             result.is_err(),
             "token must not verify against an unrelated public key"
         );
+    }
+
+    #[tokio::test]
+    async fn redis_call_exceeding_command_timeout_returns_repository_error() {
+        let timeout = std::time::Duration::from_millis(10);
+
+        let result: Result<(), DomainError> = match tokio::time::timeout(timeout, async {
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        })
+        .await
+        {
+            Ok(()) => Ok(()),
+            Err(_) => Err(DomainError::Repository("redis command timed out".into())),
+        };
+
+        assert!(matches!(result, Err(DomainError::Repository(_))));
     }
 }
