@@ -35,6 +35,25 @@ pub struct AppConfig {
     pub retry_initial_backoff_ms: u64,
     #[serde(default = "default_retry_backoff_multiplier")]
     pub retry_backoff_multiplier: u32,
+    #[cfg_attr(not(feature = "postgres"), allow(dead_code))]
+    #[serde(default = "default_db_pool_max_connections")]
+    pub db_pool_max_connections: u32,
+    #[cfg_attr(not(feature = "postgres"), allow(dead_code))]
+    #[serde(default = "default_db_pool_min_connections")]
+    pub db_pool_min_connections: u32,
+    #[cfg_attr(not(feature = "postgres"), allow(dead_code))]
+    #[serde(default = "default_db_pool_connect_timeout_ms")]
+    pub db_pool_connect_timeout_ms: u64,
+    #[cfg_attr(not(feature = "postgres"), allow(dead_code))]
+    #[serde(default = "default_db_pool_idle_timeout_ms")]
+    pub db_pool_idle_timeout_ms: u64,
+    #[cfg_attr(not(feature = "postgres"), allow(dead_code))]
+    #[serde(default = "default_db_pool_max_lifetime_ms")]
+    pub db_pool_max_lifetime_ms: u64,
+    #[serde(default = "default_redis_connect_timeout_ms")]
+    pub redis_connect_timeout_ms: u64,
+    #[serde(default = "default_redis_command_timeout_ms")]
+    pub redis_command_timeout_ms: u64,
 }
 
 fn default_host() -> String {
@@ -93,6 +112,34 @@ fn default_retry_backoff_multiplier() -> u32 {
     2
 }
 
+fn default_db_pool_max_connections() -> u32 {
+    10
+}
+
+fn default_db_pool_min_connections() -> u32 {
+    2
+}
+
+fn default_db_pool_connect_timeout_ms() -> u64 {
+    30_000
+}
+
+fn default_db_pool_idle_timeout_ms() -> u64 {
+    600_000
+}
+
+fn default_db_pool_max_lifetime_ms() -> u64 {
+    1_800_000
+}
+
+fn default_redis_connect_timeout_ms() -> u64 {
+    2_000
+}
+
+fn default_redis_command_timeout_ms() -> u64 {
+    2_000
+}
+
 impl AppConfig {
     pub fn from_env() -> Result<Self, config::ConfigError> {
         dotenvy::dotenv().ok();
@@ -122,5 +169,69 @@ impl AppConfig {
             retry_initial_backoff_ms: self.retry_initial_backoff_ms,
             retry_backoff_multiplier: self.retry_backoff_multiplier,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn set_required_env() {
+        std::env::set_var("JWT_PRIVATE_KEY_PATH", "/tmp/private.pem");
+        std::env::set_var("JWT_PUBLIC_KEY_PATH", "/tmp/public.pem");
+        #[cfg(feature = "postgres")]
+        std::env::set_var("DATABASE_URL", "postgres://user:pass@localhost/db");
+    }
+
+    fn clear_pool_env() {
+        for key in [
+            "DB_POOL_MAX_CONNECTIONS",
+            "DB_POOL_MIN_CONNECTIONS",
+            "DB_POOL_CONNECT_TIMEOUT_MS",
+            "DB_POOL_IDLE_TIMEOUT_MS",
+            "DB_POOL_MAX_LIFETIME_MS",
+            "REDIS_CONNECT_TIMEOUT_MS",
+            "REDIS_COMMAND_TIMEOUT_MS",
+        ] {
+            std::env::remove_var(key);
+        }
+    }
+
+    // Both cases share one test because `cargo test`'s default concurrent
+    // runner makes the two otherwise race on the same process-global env vars.
+    #[test]
+    fn pool_and_redis_timeout_fields_fall_back_to_defaults_then_read_from_env() {
+        set_required_env();
+        clear_pool_env();
+
+        let cfg = AppConfig::from_env().expect("config should load with only required fields set");
+
+        assert_eq!(cfg.db_pool_max_connections, 10);
+        assert_eq!(cfg.db_pool_min_connections, 2);
+        assert_eq!(cfg.db_pool_connect_timeout_ms, 30_000);
+        assert_eq!(cfg.db_pool_idle_timeout_ms, 600_000);
+        assert_eq!(cfg.db_pool_max_lifetime_ms, 1_800_000);
+        assert_eq!(cfg.redis_connect_timeout_ms, 2_000);
+        assert_eq!(cfg.redis_command_timeout_ms, 2_000);
+
+        std::env::set_var("DB_POOL_MAX_CONNECTIONS", "25");
+        std::env::set_var("DB_POOL_MIN_CONNECTIONS", "5");
+        std::env::set_var("DB_POOL_CONNECT_TIMEOUT_MS", "15000");
+        std::env::set_var("DB_POOL_IDLE_TIMEOUT_MS", "300000");
+        std::env::set_var("DB_POOL_MAX_LIFETIME_MS", "900000");
+        std::env::set_var("REDIS_CONNECT_TIMEOUT_MS", "1500");
+        std::env::set_var("REDIS_COMMAND_TIMEOUT_MS", "1500");
+
+        let cfg = AppConfig::from_env().expect("config should load with overrides set");
+
+        assert_eq!(cfg.db_pool_max_connections, 25);
+        assert_eq!(cfg.db_pool_min_connections, 5);
+        assert_eq!(cfg.db_pool_connect_timeout_ms, 15_000);
+        assert_eq!(cfg.db_pool_idle_timeout_ms, 300_000);
+        assert_eq!(cfg.db_pool_max_lifetime_ms, 900_000);
+        assert_eq!(cfg.redis_connect_timeout_ms, 1_500);
+        assert_eq!(cfg.redis_command_timeout_ms, 1_500);
+
+        clear_pool_env();
     }
 }

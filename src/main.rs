@@ -50,10 +50,28 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|| "redis://127.0.0.1:6379".into());
 
     let redis_client = redis::Client::open(redis_url)?;
-    let redis_conn = redis::aio::ConnectionManager::new(redis_client).await?;
+    let redis_conn = tokio::time::timeout(
+        std::time::Duration::from_millis(cfg.redis_connect_timeout_ms),
+        redis::aio::ConnectionManager::new(redis_client),
+    )
+    .await
+    .map_err(|_| anyhow::anyhow!("timed out connecting to redis"))??;
 
     #[cfg(feature = "postgres")]
-    let pool = sqlx::PgPool::connect(&cfg.database_url).await?;
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(cfg.db_pool_max_connections)
+        .min_connections(cfg.db_pool_min_connections)
+        .acquire_timeout(std::time::Duration::from_millis(
+            cfg.db_pool_connect_timeout_ms,
+        ))
+        .idle_timeout(std::time::Duration::from_millis(
+            cfg.db_pool_idle_timeout_ms,
+        ))
+        .max_lifetime(std::time::Duration::from_millis(
+            cfg.db_pool_max_lifetime_ms,
+        ))
+        .connect(&cfg.database_url)
+        .await?;
     #[cfg(feature = "postgres")]
     sqlx::migrate!("./migrations").run(&pool).await?;
 
@@ -93,6 +111,7 @@ async fn main() -> anyhow::Result<()> {
             redis_conn.clone(),
             redis_breaker,
             resilience_cfg.retry_policy(),
+            cfg.redis_command_timeout_ms,
         )
         .expect("failed to load Ed25519 JWT keys"),
     )

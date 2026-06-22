@@ -220,6 +220,13 @@ All configuration via environment variables (12-Factor). See `.env.example` for 
 | `GRPC_PORT` | `50051` | gRPC port |
 | `DATABASE_URL` | — | PostgreSQL connection string (only read when built with `--features postgres`) |
 | `REDIS_URL` | `redis://127.0.0.1:6379` | Redis connection string (refresh token storage) |
+| `DB_POOL_MAX_CONNECTIONS` | `10` | Maximum number of pooled Postgres connections (only used with `--features postgres`) |
+| `DB_POOL_MIN_CONNECTIONS` | `2` | Minimum number of idle Postgres connections kept open |
+| `DB_POOL_CONNECT_TIMEOUT_MS` | `30000` | Max time to wait for a free connection from the pool, in milliseconds |
+| `DB_POOL_IDLE_TIMEOUT_MS` | `600000` | Time before an idle connection above the minimum is closed, in milliseconds |
+| `DB_POOL_MAX_LIFETIME_MS` | `1800000` | Max lifetime of a pooled connection before it is recycled, in milliseconds |
+| `REDIS_CONNECT_TIMEOUT_MS` | `2000` | Max time to establish the Redis TCP connection, in milliseconds |
+| `REDIS_COMMAND_TIMEOUT_MS` | `2000` | Max time to wait for a Redis command response, in milliseconds |
 | `JWT_PRIVATE_KEY_PATH` | — | Path to the Ed25519 PEM private key used to sign access tokens |
 | `JWT_PUBLIC_KEY_PATH` | — | Path to the Ed25519 PEM public key used to verify access tokens |
 | `JWT_ACCESS_TTL_SECONDS` | `900` | Access token TTL, in seconds |
