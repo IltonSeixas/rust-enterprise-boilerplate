@@ -35,14 +35,19 @@ pub struct AppConfig {
     pub retry_initial_backoff_ms: u64,
     #[serde(default = "default_retry_backoff_multiplier")]
     pub retry_backoff_multiplier: u32,
+    #[cfg_attr(not(feature = "postgres"), allow(dead_code))]
     #[serde(default = "default_db_pool_max_connections")]
     pub db_pool_max_connections: u32,
+    #[cfg_attr(not(feature = "postgres"), allow(dead_code))]
     #[serde(default = "default_db_pool_min_connections")]
     pub db_pool_min_connections: u32,
+    #[cfg_attr(not(feature = "postgres"), allow(dead_code))]
     #[serde(default = "default_db_pool_connect_timeout_ms")]
     pub db_pool_connect_timeout_ms: u64,
+    #[cfg_attr(not(feature = "postgres"), allow(dead_code))]
     #[serde(default = "default_db_pool_idle_timeout_ms")]
     pub db_pool_idle_timeout_ms: u64,
+    #[cfg_attr(not(feature = "postgres"), allow(dead_code))]
     #[serde(default = "default_db_pool_max_lifetime_ms")]
     pub db_pool_max_lifetime_ms: u64,
     #[serde(default = "default_redis_connect_timeout_ms")]
@@ -192,8 +197,10 @@ mod tests {
         }
     }
 
+    // Both cases share one test because `cargo test`'s default concurrent
+    // runner makes the two otherwise race on the same process-global env vars.
     #[test]
-    fn pool_and_redis_timeout_fields_fall_back_to_documented_defaults() {
+    fn pool_and_redis_timeout_fields_fall_back_to_defaults_then_read_from_env() {
         set_required_env();
         clear_pool_env();
 
@@ -206,11 +213,7 @@ mod tests {
         assert_eq!(cfg.db_pool_max_lifetime_ms, 1_800_000);
         assert_eq!(cfg.redis_connect_timeout_ms, 2_000);
         assert_eq!(cfg.redis_command_timeout_ms, 2_000);
-    }
 
-    #[test]
-    fn pool_and_redis_timeout_fields_read_from_env() {
-        set_required_env();
         std::env::set_var("DB_POOL_MAX_CONNECTIONS", "25");
         std::env::set_var("DB_POOL_MIN_CONNECTIONS", "5");
         std::env::set_var("DB_POOL_CONNECT_TIMEOUT_MS", "15000");
