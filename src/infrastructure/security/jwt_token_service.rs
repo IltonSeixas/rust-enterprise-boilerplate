@@ -33,6 +33,7 @@ pub struct JwtTokenService {
 impl JwtTokenService {
     /// `private_key_pem` and `public_key_pem` must be PKCS#8 PEM-encoded Ed25519 keys,
     /// e.g. generated via `openssl genpkey -algorithm ed25519`.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         private_key_pem: &[u8],
         public_key_pem: &[u8],
