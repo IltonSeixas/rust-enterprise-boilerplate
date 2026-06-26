@@ -77,7 +77,7 @@ tonic-prost-build = "0.14"
 [dev-dependencies]
 mockall = "0.14"
 tokio = { version = "1", features = ["full", "test-util"] }
-axum-test = "20"
+axum-test = "21"
 serde_json = "1"
 
 [profile.release]
