@@ -73,7 +73,7 @@ async fn main() -> anyhow::Result<()> {
         .connect(&cfg.database_url)
         .await?;
     #[cfg(feature = "postgres")]
-    sqlx::migrate!("./migrations").run(&pool).await?;
+    infrastructure::persistence::migrations::run(&pool).await?;
 
     #[cfg(feature = "postgres")]
     let user_repo: Arc<dyn domain::repositories::UserRepository> =
