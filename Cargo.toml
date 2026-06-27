@@ -22,6 +22,7 @@ axum = { version = "0.8", features = ["macros"] }
 tower = { version = "0.5", features = ["full"] }
 tower-http = { version = "0.7", features = ["cors", "trace", "compression-gzip"] }
 tower_governor = { version = "0.8", features = ["axum"] }
+governor = "0.10"
 
 # gRPC
 tonic = "0.14"

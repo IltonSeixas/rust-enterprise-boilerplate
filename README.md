@@ -124,8 +124,8 @@ The `PasswordHasher` trait abstracts the algorithm — the domain never touches 
 
 ### Security Middleware (applied globally)
 
-- Rate limiting: per-IP token bucket via `tower_governor` (`RATE_LIMIT_PER_SECOND`/`RATE_LIMIT_BURST`, default 10 req/s with a burst of 20)
-- Security headers: `X-Content-Type-Options`, `X-Frame-Options`, `Strict-Transport-Security`, `Referrer-Policy`
+- Rate limiting: per-IP token bucket via `tower_governor` (`RATE_LIMIT_PER_SECOND`/`RATE_LIMIT_BURST`, default 10 req/s with a burst of 20), enforced on both REST and gRPC with the same policy — a `ConnectInfoBridgeLayer` adapts tonic's native peer-address extension into the type the rate limiter reads, so unauthenticated gRPC calls cannot bypass the limiter REST is subject to
+- Security headers: `X-Content-Type-Options`, `X-Frame-Options`, `Strict-Transport-Security`, `Referrer-Policy`, `Content-Security-Policy`, `Permissions-Policy`
 - CORS: explicit allow-list via `ALLOWED_ORIGINS`, never `*` — unlisted origins receive no CORS headers
 - Input validation: self-validating domain value objects (`Email`, `PasswordHash`, ...) reject malformed input at construction time
 

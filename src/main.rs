@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use anyhow::Context;
 use tokio::net::TcpListener;
 use tonic::transport::Server as GrpcServer;
 
@@ -28,21 +29,26 @@ use infrastructure::{
     telemetry::{init_prometheus, init_tracing},
 };
 use interfaces::{
-    grpc::{AuthGrpcService, AuthServiceServer, UserGrpcService, UserServiceServer},
+    grpc::{
+        AuthGrpcService, AuthServiceServer, ConnectInfoBridgeLayer, UserGrpcService,
+        UserServiceServer,
+    },
     http::{
         build_router,
         handlers::{auth_handler::AuthState, health_handler::HealthState, user_handler::UserState},
         middleware::AuthMiddlewareState,
         RouterConfig,
     },
+    rate_limit::build_governor_config,
 };
+use tower_governor::GovernorLayer;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let cfg = AppConfig::from_env().expect("failed to load configuration");
+    let cfg = AppConfig::from_env().context("failed to load configuration")?;
 
     let tracer_provider = init_tracing("rust-enterprise-boilerplate", &cfg.otlp_endpoint)?;
-    let metrics_handle = init_prometheus();
+    let metrics_handle = init_prometheus().context("failed to install Prometheus recorder")?;
 
     let redis_url = cfg
         .redis_url
@@ -92,11 +98,12 @@ async fn main() -> anyhow::Result<()> {
         Arc::new(InMemoryAuditLog::new()) as Arc<dyn application::ports::AuditPort>,
     );
     let hasher: Arc<dyn application::ports::PasswordHasher> =
-        Arc::new(Argon2Hasher::new()) as Arc<dyn application::ports::PasswordHasher>;
+        Arc::new(Argon2Hasher::new().context("failed to initialize Argon2 hasher")?)
+            as Arc<dyn application::ports::PasswordHasher>;
     let jwt_private_key =
-        std::fs::read(&cfg.jwt_private_key_path).expect("failed to read JWT_PRIVATE_KEY_PATH");
+        std::fs::read(&cfg.jwt_private_key_path).context("failed to read JWT_PRIVATE_KEY_PATH")?;
     let jwt_public_key =
-        std::fs::read(&cfg.jwt_public_key_path).expect("failed to read JWT_PUBLIC_KEY_PATH");
+        std::fs::read(&cfg.jwt_public_key_path).context("failed to read JWT_PUBLIC_KEY_PATH")?;
     let resilience_cfg = cfg.resilience();
     let redis_breaker = CircuitBreaker::new(
         resilience_cfg.failure_threshold,
@@ -113,7 +120,7 @@ async fn main() -> anyhow::Result<()> {
             resilience_cfg.retry_policy(),
             cfg.redis_command_timeout_ms,
         )
-        .expect("failed to load Ed25519 JWT keys"),
+        .context("failed to load Ed25519 JWT keys")?,
     )
         as Arc<dyn application::ports::TokenService>;
 
@@ -190,7 +197,7 @@ async fn main() -> anyhow::Result<()> {
         health_state,
         metrics_handle,
         router_cfg,
-    );
+    )?;
 
     let http_addr = format!("{}:{}", cfg.host, cfg.port);
     let listener = TcpListener::bind(&http_addr).await?;
@@ -203,7 +210,15 @@ async fn main() -> anyhow::Result<()> {
         listener,
         router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
     );
+    // gRPC shares the same per-IP token bucket policy as the REST API so
+    // unauthenticated RPCs cannot bypass the HTTP rate limiter. tower_governor
+    // keys on `ConnectInfo<SocketAddr>`, which tonic does not insert by
+    // default, so `ConnectInfoBridgeLayer` copies it from tonic's own
+    // `TcpConnectInfo` extension first.
+    let grpc_governor_cfg = build_governor_config(cfg.rate_limit_per_second, cfg.rate_limit_burst)?;
     let grpc_server = GrpcServer::builder()
+        .layer(ConnectInfoBridgeLayer)
+        .layer(GovernorLayer::new(grpc_governor_cfg))
         .add_service(AuthServiceServer::new(auth_grpc))
         .add_service(UserServiceServer::new(user_grpc))
         .serve(grpc_addr);

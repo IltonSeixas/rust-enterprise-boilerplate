@@ -1,7 +1,5 @@
-use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
+use metrics_exporter_prometheus::{BuildError, PrometheusBuilder, PrometheusHandle};
 
-pub fn init_prometheus() -> PrometheusHandle {
-    PrometheusBuilder::new()
-        .install_recorder()
-        .expect("failed to install Prometheus recorder")
+pub fn init_prometheus() -> Result<PrometheusHandle, BuildError> {
+    PrometheusBuilder::new().install_recorder()
 }

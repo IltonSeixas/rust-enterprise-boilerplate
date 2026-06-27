@@ -3282,6 +3282,7 @@ dependencies = [
  "chrono",
  "config",
  "dotenvy",
+ "governor",
  "jsonwebtoken",
  "metrics",
  "metrics-exporter-prometheus",

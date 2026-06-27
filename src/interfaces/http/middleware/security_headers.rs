@@ -17,6 +17,16 @@ pub async fn security_headers(req: Request, next: Next) -> Response {
         "referrer-policy",
         HeaderValue::from_static("strict-origin-when-cross-origin"),
     );
+    // This is a JSON/gRPC API with no HTML rendering, so the strictest
+    // policy applies: nothing is permitted to load.
+    headers.insert(
+        "content-security-policy",
+        HeaderValue::from_static("default-src 'none'; frame-ancestors 'none'"),
+    );
+    headers.insert(
+        "permissions-policy",
+        HeaderValue::from_static("geolocation=(), microphone=(), camera=()"),
+    );
 
     res
 }
@@ -51,6 +61,10 @@ mod tests {
         assert_eq!(
             headers["referrer-policy"],
             "strict-origin-when-cross-origin"
+        );
+        assert_eq!(
+            headers["content-security-policy"],
+            "default-src 'none'; frame-ancestors 'none'"
         );
     }
 }

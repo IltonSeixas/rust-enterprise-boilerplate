@@ -18,5 +18,36 @@ pub fn to_status(err: DomainError) -> Status {
         DomainError::ServiceUnavailable => Code::Unavailable,
     };
 
-    Status::new(code, err.to_string())
+    // Repository errors carry raw database/cache failure strings that must
+    // never reach the client; every other variant's Display output is a
+    // fixed, safe message.
+    let message = match &err {
+        DomainError::Repository(_) => "internal server error".to_string(),
+        _ => err.to_string(),
+    };
+
+    Status::new(code, message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn repository_errors_never_leak_the_underlying_message() {
+        let status = to_status(DomainError::Repository(
+            "connection string: postgres://user:secret@db".into(),
+        ));
+
+        assert_eq!(status.code(), Code::Internal);
+        assert_eq!(status.message(), "internal server error");
+    }
+
+    #[test]
+    fn domain_validation_errors_pass_through_their_message() {
+        let status = to_status(DomainError::InvalidEmail);
+
+        assert_eq!(status.code(), Code::InvalidArgument);
+        assert_eq!(status.message(), "invalid email address");
+    }
 }

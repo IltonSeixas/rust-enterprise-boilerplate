@@ -1,26 +1,25 @@
-use std::time::Duration;
-
 use axum::{
     middleware,
     routing::{get, post, put},
     Router,
 };
 use metrics_exporter_prometheus::PrometheusHandle;
-use tower_governor::{
-    governor::GovernorConfigBuilder, key_extractor::PeerIpKeyExtractor, GovernorLayer,
-};
+use tower_governor::GovernorLayer;
 use tower_http::trace::TraceLayer;
 
-use crate::interfaces::http::{
-    handlers::{
-        auth_handler::{login, refresh, register, AuthState},
-        health_handler::{health, ready, HealthState},
-        metrics_handler::metrics,
-        user_handler::{
-            change_password, change_role, get_me, get_user, list_users, update_me, UserState,
+use crate::interfaces::{
+    http::{
+        handlers::{
+            auth_handler::{login, refresh, register, AuthState},
+            health_handler::{health, ready, HealthState},
+            metrics_handler::metrics,
+            user_handler::{
+                change_password, change_role, get_me, get_user, list_users, update_me, UserState,
+            },
         },
+        middleware::{build_cors_layer, require_auth, security_headers, AuthMiddlewareState},
     },
-    middleware::{build_cors_layer, require_auth, security_headers, AuthMiddlewareState},
+    rate_limit::build_governor_config,
 };
 
 pub struct RouterConfig {
@@ -36,14 +35,11 @@ pub fn build_router(
     health_state: HealthState,
     metrics_handle: PrometheusHandle,
     router_cfg: RouterConfig,
-) -> Router {
-    let rate_limit_per_second = router_cfg.rate_limit_per_second.max(1) as u32;
-    let governor_cfg = GovernorConfigBuilder::default()
-        .key_extractor(PeerIpKeyExtractor)
-        .period(Duration::from_secs(1) / rate_limit_per_second)
-        .burst_size(router_cfg.rate_limit_burst)
-        .finish()
-        .expect("invalid rate limiter configuration");
+) -> anyhow::Result<Router> {
+    let governor_cfg = build_governor_config(
+        router_cfg.rate_limit_per_second,
+        router_cfg.rate_limit_burst,
+    )?;
     let public_routes = Router::new()
         .route("/health", get(health))
         .route("/ready", get(ready).with_state(health_state.clone()))
@@ -70,11 +66,11 @@ pub fn build_router(
         )
         .layer(middleware::from_fn_with_state(auth_mw_state, require_auth));
 
-    Router::new()
+    Ok(Router::new()
         .merge(public_routes)
         .merge(protected_routes)
         .layer(TraceLayer::new_for_http())
         .layer(middleware::from_fn(security_headers))
         .layer(build_cors_layer(&router_cfg.allowed_origins))
-        .layer(GovernorLayer::new(governor_cfg))
+        .layer(GovernorLayer::new(governor_cfg)))
 }

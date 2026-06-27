@@ -14,17 +14,12 @@ pub struct Argon2Hasher {
 }
 
 impl Argon2Hasher {
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self, DomainError> {
         use argon2::{Algorithm, Params, Version};
-        let params = Params::new(65536, 3, 4, None).expect("valid argon2 params");
+        let params =
+            Params::new(65536, 3, 4, None).map_err(|e| DomainError::Repository(e.to_string()))?;
         let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
-        Self { argon2 }
-    }
-}
-
-impl Default for Argon2Hasher {
-    fn default() -> Self {
-        Self::new()
+        Ok(Self { argon2 })
     }
 }
 
